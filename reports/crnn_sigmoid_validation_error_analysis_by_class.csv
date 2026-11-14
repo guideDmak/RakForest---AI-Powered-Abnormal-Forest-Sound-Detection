@@ -1,0 +1,11 @@
+class,true_positive,false_positive,false_negative,true_negative
+fire,331,62,53,15496
+chainsaw,3122,554,107,12159
+vehicle,3211,391,122,12218
+human_activity,918,585,26,14413
+threat_tactical,113,250,23,15556
+gunshot,31,49,10,15852
+weather,182,232,34,15494
+natural_ambient,4417,379,184,10962
+silence,15,16,7,15904
+other,2810,485,226,12421

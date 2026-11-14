@@ -1,0 +1,75 @@
+{
+  "model_name": "RakForest CRNN Sigmoid multi-label variant",
+  "model_type": "multilabel_crnn",
+  "schema_version": "crnn-sigmoid-v1",
+  "checkpoint": "models/rakforest_crnn_sigmoid_best.pt",
+  "class_names": [
+    "fire",
+    "chainsaw",
+    "vehicle",
+    "human_activity",
+    "threat_tactical",
+    "gunshot",
+    "weather",
+    "natural_ambient",
+    "silence",
+    "other"
+  ],
+  "class_to_index": {
+    "fire": 0,
+    "chainsaw": 1,
+    "vehicle": 2,
+    "human_activity": 3,
+    "threat_tactical": 4,
+    "gunshot": 5,
+    "weather": 6,
+    "natural_ambient": 7,
+    "silence": 8,
+    "other": 9
+  },
+  "input": {
+    "sample_rate": 16000,
+    "duration_seconds": 4.0,
+    "num_samples": 64000,
+    "channels": 1
+  },
+  "features": {
+    "type": "log_mel_spectrogram",
+    "n_mels": 64,
+    "n_fft": 1024,
+    "hop_length": 320,
+    "per_clip_standardization": true
+  },
+  "targets": {
+    "encoding": "multi_hot",
+    "activation": "sigmoid",
+    "default_threshold": 0.5,
+    "silence_other_are_mutually_exclusive_tags": true
+  },
+  "augmentation": {
+    "type": "waveform_mix",
+    "probability": 0.05,
+    "secondary_snr_db_range": [
+      -6.0,
+      3.0
+    ],
+    "excluded_tags": [
+      "other",
+      "silence"
+    ]
+  },
+  "training": {
+    "seed": 42,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "max_epochs": 20,
+    "early_stopping_patience": 4,
+    "selection_metric": "validation macro-F1 at 0.5",
+    "best_epoch": 20,
+    "best_validation_macro_f1": 0.7369501761589003
+  },
+  "manifest": "data/processed/processed_manifest.parquet",
+  "manifest_signature": "c48a3ad390c33c96de0dabd631d2ef90a89d9a270792354bc1b9f2e5adcc6958",
+  "test_split_used": false
+}

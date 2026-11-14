@@ -1,0 +1,26 @@
+{
+  "validation_rows": 24365,
+  "single_label": {
+    "validation_macro_f1": 0.8127256824927217,
+    "validation_accuracy": 0.934290991175867,
+    "validation_exact_match": 0.934290991175867
+  },
+  "multi_label_candidate": {
+    "validation_macro_f1": 0.7513443953670111,
+    "validation_micro_f1": 0.8966253982182713,
+    "validation_exact_match": 0.8414529037553868,
+    "validation_hamming_loss": 0.02224091935152883,
+    "threshold": 0.5
+  },
+  "crnn_sigmoid": {
+    "validation_macro_f1": 0.657424608676417,
+    "validation_micro_f1": 0.7381004208387753,
+    "validation_exact_match": 0.6510158013544018,
+    "validation_hamming_loss": 0.05925713113072029,
+    "threshold": 0.5
+  },
+  "crnn_checkpoint": "models/rakforest_crnn_sigmoid_best.pt",
+  "candidate_checkpoint": "models/rakforest_audio_cnn_multilabel_best.pt",
+  "single_checkpoint": "models/rakforest_audio_cnn_singlelabel_retrained_best.pt",
+  "note": "Validation only. Different target/output tasks; do not interpret score difference as a direct ranking."
+}

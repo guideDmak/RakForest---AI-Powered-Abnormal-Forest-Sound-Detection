@@ -1,0 +1,18 @@
+{
+  "validation_rows": 15813,
+  "single_label": {
+    "validation_macro_f1": 0.8085683455627777,
+    "validation_accuracy": 0.9122241193954341,
+    "validation_exact_match": 0.9122241193954341
+  },
+  "multi_label_candidate": {
+    "validation_macro_f1": 0.741513119344004,
+    "validation_micro_f1": 0.8702815191629574,
+    "validation_exact_match": 0.8057927022070448,
+    "validation_hamming_loss": 0.03153523472248572,
+    "threshold": 0.5
+  },
+  "candidate_checkpoint": "models/rakforest_audio_cnn_multilabel_best.pt",
+  "single_checkpoint": "models/rakforest_audio_cnn_singlelabel_retrained_best.pt",
+  "note": "Validation only. Different target/output tasks; do not interpret score difference as a direct ranking."
+}

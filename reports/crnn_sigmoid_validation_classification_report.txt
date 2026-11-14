@@ -1,0 +1,17 @@
+                 precision    recall  f1-score   support
+
+           fire      0.761     0.987     0.860       307
+       chainsaw      0.863     0.972     0.914      3234
+        vehicle      0.836     0.975     0.900      3479
+ human_activity      0.672     0.739     0.704      6708
+threat_tactical      0.099     0.910     0.178       134
+        gunshot      0.926     0.316     0.471      2679
+        weather      0.300     0.916     0.452       214
+natural_ambient      0.881     0.969     0.923      4597
+        silence      0.440     1.000     0.611        22
+          other      0.394     0.973     0.561      2991
+
+      micro avg      0.661     0.835     0.738     24365
+      macro avg      0.617     0.876     0.657     24365
+   weighted avg      0.748     0.835     0.755     24365
+    samples avg      0.738     0.835     0.768     24365

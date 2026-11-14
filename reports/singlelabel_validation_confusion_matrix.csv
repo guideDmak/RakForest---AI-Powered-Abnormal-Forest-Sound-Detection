@@ -1,0 +1,11 @@
+,fire,chainsaw,vehicle,human_activity,threat_tactical,gunshot,weather,natural_ambient,silence,other
+fire,264,0,3,5,5,10,2,0,0,18
+chainsaw,0,2980,21,6,0,1,0,211,0,15
+vehicle,0,0,3263,50,4,9,18,8,0,127
+human_activity,6,1,14,6531,24,39,8,14,0,71
+threat_tactical,4,0,6,34,59,19,1,0,0,11
+gunshot,0,0,4,19,2,2648,4,1,0,1
+weather,1,0,41,10,6,7,120,6,1,22
+natural_ambient,0,146,24,35,3,3,6,4338,0,42
+silence,0,0,2,1,0,0,7,3,8,1
+other,0,13,203,159,12,17,9,25,0,2553
