@@ -66,10 +66,10 @@
     "max_epochs": 20,
     "early_stopping_patience": 4,
     "selection_metric": "validation macro-F1 at 0.5",
-    "best_epoch": 20,
-    "best_validation_macro_f1": 0.7369501761589003
+    "best_epoch": 16,
+    "best_validation_macro_f1": 0.7971463341426348
   },
   "manifest": "data/processed/processed_manifest.parquet",
-  "manifest_signature": "c48a3ad390c33c96de0dabd631d2ef90a89d9a270792354bc1b9f2e5adcc6958",
+  "manifest_signature": "cac49d32a0e5e562e3234522306c9dacec99b934d4a62c8d7f96dd3423783052",
   "test_split_used": false
 }

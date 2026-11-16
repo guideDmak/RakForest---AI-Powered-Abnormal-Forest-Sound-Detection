@@ -67,9 +67,9 @@
     "early_stopping_patience": 4,
     "selection_metric": "validation macro-F1 at 0.5",
     "best_epoch": 18,
-    "best_validation_macro_f1": 0.7513443953670111
+    "best_validation_macro_f1": 0.7464092503693351
   },
   "manifest": "data/processed/processed_manifest.parquet",
-  "manifest_signature": "71cb4013edba702dd8b34f290c775868bcd87a6bf399f1df83e1fd3ab2265cf0",
+  "manifest_signature": "cac49d32a0e5e562e3234522306c9dacec99b934d4a62c8d7f96dd3423783052",
   "test_split_used": false
 }
