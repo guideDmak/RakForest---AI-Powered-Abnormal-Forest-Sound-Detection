@@ -14,10 +14,10 @@ echo Keep this window open while using the website.
 echo Open the Local URL printed below in your browser.
 echo Usually: http://127.0.0.1:3000/login
 echo.
-node node_modules\next\dist\bin\next dev --webpack --hostname 127.0.0.1
+node scripts\start-local.mjs
 set "RAKFOREST_EXIT=%ERRORLEVEL%"
 echo.
-echo RakForest server stopped. Exit code: %RAKFOREST_EXIT%
+echo RakForest launcher finished. Exit code: %RAKFOREST_EXIT%
 pause
 exit /b %RAKFOREST_EXIT%
 

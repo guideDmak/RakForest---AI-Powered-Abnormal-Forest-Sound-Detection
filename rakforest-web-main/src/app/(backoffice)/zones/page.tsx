@@ -1,649 +1,981 @@
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
-  ArrowRight,
-  CheckCircle2,
   MapPin,
-  Plus,
-  Radio,
-  RotateCcw,
   Trees,
+  Radio,
+  Map as MapIcon,
+  ArrowDown,
+  ArrowUp,
 } from "lucide-react";
+import { RiskBadge } from "@/components/reports/RiskBadge";
 import { rakforestRepo } from "@/lib/supabase/repository";
-import { calculatePolygonAreaRai } from "@/lib/utils/geo";
 import {
-  RiskBadge,
-  StationStatusBadge,
-} from "@/components/reports/RiskBadge";
+  validatePolygon,
+  openPolygon,
+  calculatePolygonAreaRai,
+  pointWithinBoundary,
+  type PolygonPoint,
+} from "@/lib/utils/geo";
+import {
+  control,
+  primary,
+  secondary,
+  panel,
+  messageOf,
+} from "@/components/accounts/account-ui";
+import DeleteDialog from "@/components/accounts/delete-dialog";
 import type {
   ForestZone,
   Profile,
-  RiskLevel,
   SensorStation,
+  RiskLevel,
   StationStatus,
 } from "@/types/database.types";
-
 const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
   ssr: false,
 });
+type DirectoryTab = "zones" | "stations";
+const directoryTabs = ["zones", "stations"] as const;
+const compactCard =
+  "flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-[#D4DCD5] bg-white p-3";
 
-export default function BackofficeZonesAndStationsPage() {
-  const [zones, setZones] = useState<ForestZone[]>([]);
-  const [stations, setStations] = useState<SensorStation[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [mode, setMode] = useState<"view" | "new_zone" | "new_station">("view");
-  const [feedback, setFeedback] = useState("");
-  const [busy, setBusy] = useState(false);
+type Mode = "view" | "polygon" | "station";
+const blankZone = {
+  code: "",
+  name: "",
+  province: "",
+  district: "",
+  risk: "yellow" as RiskLevel,
+  officer: "",
+  description: "",
+};
+const blankStation = {
+  code: "",
+  name: "",
+  zone: "",
+  lat: "",
+  lng: "",
+  radius: "350",
+  status: "online" as StationStatus,
+  notes: "",
+};
+export default function ZonesPage() {
+  const [zones, setZones] = useState<ForestZone[]>([]),
+    [stations, setStations] = useState<SensorStation[]>([]),
+    [profiles, setProfiles] = useState<Profile[]>([]);
+  const [mode, setMode] = useState<Mode>("view"),
+    [loading, setLoading] = useState(true),
+    [loadError, setLoadError] = useState("");
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [feedback, setFeedback] = useState("");
+  const lock = useRef(false);
+  const [tab, setTab] = useState<DirectoryTab>("zones");
+  const [queries, setQueries] = useState({ zones: "", stations: "" });
+  const mapSection = useRef<HTMLElement>(null);
+  const formSection = useRef<HTMLElement>(null);
+  const zoneTab = useRef<HTMLButtonElement>(null);
+  const stationTab = useRef<HTMLButtonElement>(null);
+  const tabRefs = { zones: zoneTab, stations: stationTab };
 
-  // New Zone Form State (Interactive Polygon Drawing)
-  const [zoneName, setZoneName] = useState("");
-  const [zoneCode, setZoneCode] = useState("ZN-CM-05");
-  const [province, setProvince] = useState("เชียงใหม่");
-  const [district, setDistrict] = useState("สะเมิง");
-  const [riskLevel, setRiskLevel] = useState<RiskLevel>("yellow");
-  const [officerId, setOfficerId] = useState("");
-  const [zoneDesc, setZoneDesc] = useState("");
-  const [draftPolygon, setDraftPolygon] = useState<[number, number][]>([]);
-
-  // New / Edit Sensor Station Form State
-  const [editingStationId, setEditingStationId] = useState<string | null>(null);
-  const [stCode, setStCode] = useState("ST-07");
-  const [stName, setStName] = useState("");
-  const [stZoneId, setStZoneId] = useState("");
-  const [stLat, setStLat] = useState("18.1320");
-  const [stLng, setStLng] = useState("98.7710");
-  const [stRadius, setStRadius] = useState("350");
-  const [stStatus, setStStatus] = useState<StationStatus>("online");
-  const [stNotes, setStNotes] = useState("");
-
-  const loadAll = useCallback(async () => {
-    const [z, st, prof] = await Promise.all([
-      rakforestRepo.getZones(),
-      rakforestRepo.getStations(),
-      rakforestRepo.getProfiles(),
-    ]);
-    setZones(z);
-    setStations(st);
-    setProfiles(prof);
-    if (!stZoneId && z[0]) setStZoneId(z[0].id);
-    if (!officerId && prof[0]) setOfficerId(prof[0].id);
-  }, [stZoneId, officerId]);
-
+  const [zone, setZone] = useState(blankZone),
+    [station, setStation] = useState(blankStation);
+  const [editingZone, setEditingZone] = useState<string>(),
+    [editingStation, setEditingStation] = useState<string>();
+  const [points, setPoints] = useState<PolygonPoint[]>([]),
+    [selectedPoint, setSelectedPoint] = useState<number | null>(null),
+    [finished, setFinished] = useState(false),
+    [acceptOutside, setAcceptOutside] = useState(false);
+  const [deleting, setDeleting] = useState<SensorStation>(),
+    [deletingZone, setDeletingZone] = useState<ForestZone>(),
+    [admin, setAdmin] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [z, s, p] = await Promise.all([
+        rakforestRepo.getZones(),
+        rakforestRepo.getStations(),
+        rakforestRepo.getProfiles({ strict: true }),
+      ]);
+      setZones(z);
+      setStations(s);
+      setProfiles(
+        p.filter(
+          (p) => p.role !== "suspended" && p.role !== "pending_verification",
+        ),
+      );
+    } catch (e) {
+      setLoadError(messageOf(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
-
-  function handleMapClick([lng, lat]: [number, number]) {
-    if (mode === "new_zone") {
-      setDraftPolygon((prev) => [...prev, [lng, lat]]);
-    } else if (mode === "new_station") {
-      setStLng(String(lng));
-      setStLat(String(lat));
-    }
+    void load();
+    rakforestRepo
+      .getCurrentProfile()
+      .then((p) => setAdmin(p?.role === "super_admin"))
+      .catch(() => setAdmin(false));
+  }, [load]);
+  function jumpTo(target: HTMLElement | null) {
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "start", behavior: "instant" });
   }
-
-  async function handleSaveZone(e: React.FormEvent) {
+  function focusEditor(target: "map" | "form") {
+    requestAnimationFrame(() => {
+      const section =
+        target === "map" ? mapSection.current : formSection.current;
+      if (
+        target === "form" ||
+        window.matchMedia("(max-width: 1023px)").matches
+      ) {
+        jumpTo(section);
+      } else {
+        section?.focus({ preventScroll: true });
+      }
+    });
+  }
+  function cancel() {
+    if (mode !== "view")
+      requestAnimationFrame(() => tabRefs[tab].current?.focus());
+    setMode("view");
+    setPoints([]);
+    setSelectedPoint(null);
+    setFinished(false);
+    setError("");
+    setAcceptOutside(false);
+  }
+  function startZone(item?: ForestZone) {
+    setEditingZone(item?.id);
+    setZone(
+      item
+        ? {
+            code: item.zone_code || "",
+            name: item.name,
+            province: item.province || "",
+            district: item.district || "",
+            risk: item.current_risk_level,
+            officer: item.responsible_officer_id || "",
+            description: item.description || "",
+          }
+        : blankZone,
+    );
+    setPoints(item ? openPolygon(item.polygon_coords) : []);
+    setSelectedPoint(null);
+    setFinished(false);
+    setAcceptOutside(false);
+    setError("");
+    setTab("zones");
+    setMode("polygon");
+    focusEditor("map");
+  }
+  function startStation(item?: SensorStation) {
+    setEditingStation(item?.id);
+    setStation(
+      item
+        ? {
+            code: item.station_code,
+            name: item.name,
+            zone: item.zone_id ?? "",
+            lat: String(item.lat),
+            lng: String(item.lng),
+            radius: String(item.radius_meters),
+            status: item.status,
+            notes: item.notes || "",
+          }
+        : blankStation,
+    );
+    setError("");
+    setTab("stations");
+    setMode("station");
+    focusEditor("form");
+  }
+  function changePoints(next: PolygonPoint[]) {
+    if (lock.current) return;
+    setPoints(next);
+    setFinished(false);
+    setAcceptOutside(false);
+    setError("");
+  }
+  let geometryError = "";
+  let area: number | null = null;
+  try {
+    area = calculatePolygonAreaRai(validatePolygon(points));
+  } catch (e) {
+    geometryError = messageOf(e);
+  }
+  const outside =
+    editingZone && area !== null
+      ? stations.filter(
+          (s) =>
+            s.zone_id === editingZone &&
+            !pointWithinBoundary([s.lng, s.lat], points),
+        )
+      : [];
+  async function saveZone(e: React.FormEvent) {
     e.preventDefault();
-    if (!zoneName.trim() || draftPolygon.length < 3) return;
+    if (lock.current) return;
+    lock.current = true;
     setBusy(true);
-    setFeedback("");
+    setError("");
     try {
-      const areaRai = calculatePolygonAreaRai(draftPolygon);
-      await rakforestRepo.saveZone({
-        zone_code: zoneCode,
-        name: zoneName,
-        province,
-        district,
-        area_rai: areaRai,
-        polygon_coords: draftPolygon,
-        current_risk_level: riskLevel,
-        responsible_officer_id: officerId || null,
-        description: zoneDesc,
+      if (!finished) throw new Error("กรุณากดจบการวาดก่อนบันทึก");
+      const polygon = validatePolygon(points);
+      if (outside.length && !acceptOutside)
+        throw new Error("กรุณาตรวจรายชื่อไมค์ที่อยู่นอกขอบเขตและยืนยันก่อนบันทึก");
+      const saved = await rakforestRepo.saveZone({
+        id: editingZone,
+        zone_code: zone.code,
+        name: zone.name,
+        province: zone.province,
+        district: zone.district,
+        current_risk_level: zone.risk,
+        responsible_officer_id: zone.officer || null,
+        description: zone.description,
+        polygon_coords: polygon,
       });
-      await loadAll();
-      setMode("view");
-      setZoneName("");
-      setDraftPolygon([]);
-      setFeedback("บันทึกโซนป่าไม้และคำนวณพื้นที่ไร่เรียบร้อยแล้ว");
+      setZones((list) => [saved, ...list.filter((z) => z.id !== saved.id)]);
+      cancel();
+      setFeedback("บันทึกขอบเขตโซนแล้ว");
+    } catch (err) {
+      setError(messageOf(err));
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   }
-
-  async function handleSaveStation(e: React.FormEvent) {
+  async function saveStation(e: React.FormEvent) {
     e.preventDefault();
-    if (!stCode.trim() || !stName.trim()) return;
+    if (lock.current) return;
+    lock.current = true;
     setBusy(true);
-    setFeedback("");
+    setError("");
     try {
-      await rakforestRepo.saveStation({
-        id: editingStationId ?? undefined,
-        station_code: stCode,
-        name: stName,
-        zone_id: stZoneId || null,
-        lat: Number(stLat),
-        lng: Number(stLng),
-        radius_meters: Number(stRadius) || 350,
-        status: stStatus,
-        notes: stNotes,
+      if (!station.lat.trim() || !station.lng.trim() || !station.radius.trim())
+        throw new Error("กรุณาระบุพิกัดและรัศมีไมค์");
+      const saved = await rakforestRepo.saveStation({
+        id: editingStation,
+        station_code: station.code,
+        name: station.name,
+        zone_id: station.zone || null,
+        lat: Number(station.lat),
+        lng: Number(station.lng),
+        radius_meters: Number(station.radius),
+        status: station.status,
+        notes: station.notes,
       });
-      await loadAll();
-      setMode("view");
-      setEditingStationId(null);
-      setFeedback(`บันทึกข้อมูลเสาไมโครโฟน ${stCode} เรียบร้อยแล้ว`);
+      setStations((list) => [saved, ...list.filter((s) => s.id !== saved.id)]);
+      cancel();
+      setFeedback("บันทึกไมค์แล้ว");
+    } catch (err) {
+      setError(messageOf(err));
     } finally {
+      lock.current = false;
       setBusy(false);
     }
   }
-
-  function startEditStation(st: SensorStation) {
-    setEditingStationId(st.id);
-    setStCode(st.station_code);
-    setStName(st.name);
-    setStZoneId(st.zone_id ?? zones[0]?.id ?? "");
-    setStLat(String(st.lat));
-    setStLng(String(st.lng));
-    setStRadius(String(st.radius_meters));
-    setStStatus(st.status);
-    setStNotes(st.notes ?? "");
-    setMode("new_station");
-  }
-
-  const calculatedRai = calculatePolygonAreaRai(draftPolygon);
+  const query = queries[tab].trim().toLocaleLowerCase();
+  const matches = (name: string, code?: string | null) =>
+    [name, code].some((value) => value?.toLocaleLowerCase().includes(query));
+  const visibleZones =
+    tab === "zones"
+      ? zones.filter((item) => matches(item.name, item.zone_code))
+      : [];
+  const visibleStations =
+    tab === "stations"
+      ? stations.filter((item) => matches(item.name, item.station_code))
+      : [];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-4 text-[#14241B]">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#14241B]">
-            จัดการโซนป่าไม้ (Forest Zones) และเสาไมค์ตรวจจับเสียง (Sensor Stations)
-          </h1>
-          <p className="text-xs text-[#526358]">
-            วาดขอบเขตโซนป่าอนุรักษ์บนแผนที่ GIS คำนวณพื้นที่ไร่อัตโนมัติ และกำหนดพิกัดเสาไมโครโฟนพร้อมรัศมีรับเสียง
+          <h1 className="text-2xl font-bold">จัดการโซนป่าและเสาไมค์</h1>
+          <p className="mt-1 text-sm text-[#526358]">
+            กำหนดขอบเขตพื้นที่ และจัดการจุดติดตั้งไมค์
           </p>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+        <nav aria-label="โหมดแผนที่" className="flex flex-wrap gap-2">
+          {mode !== "view" && (
+            <button
+              className={secondary + " gap-2"}
+              disabled={busy}
+              onClick={cancel}
+            >
+              <MapIcon size={16} aria-hidden="true" /> ดูแผนที่
+            </button>
+          )}
           <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "new_zone" ? "view" : "new_zone");
-              setDraftPolygon([]);
-            }}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition ${
-              mode === "new_zone"
-                ? "bg-[#D97706] text-white"
-                : "bg-[#1B4332] text-white hover:bg-[#2D6A4F]"
-            }`}
+            className={(mode === "station" ? secondary : primary) + " gap-2"}
+            disabled={busy || loading}
+            onClick={() => startZone()}
           >
-            <Trees className="h-4 w-4" />
-            <span>
-              {mode === "new_zone" ? "ยกเลิกการวาดโซน" : "+ วาดเพิ่มโซนป่าไม้ใหม่"}
-            </span>
+            <Trees size={16} aria-hidden="true" /> วาดโซนใหม่
           </button>
-
           <button
-            type="button"
-            onClick={() => {
-              setEditingStationId(null);
-              setStCode(`ST-0${stations.length + 1}`);
-              setStName("");
-              setMode(mode === "new_station" ? "view" : "new_station");
-            }}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3.5 py-2 text-xs font-semibold transition ${
-              mode === "new_station"
-                ? "border-[#1B4332] bg-[#EBF2ED] text-[#1B4332]"
-                : "border-[#B8C7BC] bg-white text-[#1B4332] hover:bg-[#EBF2ED]"
-            }`}
+            className={(mode === "station" ? primary : secondary) + " gap-2"}
+            disabled={busy || loading}
+            onClick={() => startStation()}
           >
-            <Radio className="h-4 w-4" />
-            <span>
-              {mode === "new_station"
-                ? "ปิดฟอร์มเสาไมค์"
-                : "+ เพิ่มเสาไมค์ตรวจจับเสียง (ST-XX)"}
-            </span>
+            <Radio size={16} aria-hidden="true" /> เพิ่มไมค์
           </button>
-        </div>
-      </div>
-
+        </nav>
+      </header>
       {feedback && (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900"
-        >
-          <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-          <span>{feedback}</span>
+        <p role="status" className="rounded-lg bg-emerald-50 p-3">
+          {feedback}
+        </p>
+      )}
+      {loadError && (
+        <div role="alert" className="rounded-lg bg-red-50 p-3">
+          <p>{loadError}</p>
+          <button className={secondary} onClick={() => void load()}>
+            ลองโหลดใหม่
+          </button>
         </div>
       )}
-
-      {/* Map + Interactive Form Split View */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        <div className="lg:col-span-7">
+      {loading && <p role="status">กำลังโหลดข้อมูล…</p>}
+      <div
+        className={
+          mode === "view"
+            ? ""
+            : "grid items-start gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]"
+        }
+      >
+        <section
+          ref={mapSection}
+          tabIndex={-1}
+          aria-label="แผนที่โซนและเสาไมค์"
+          className="min-w-0 scroll-mt-20 space-y-2"
+        >
           {mode !== "view" && (
-            <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-medium text-amber-900">
-              {mode === "new_zone"
-                ? "โหมดวาดขอบเขตโซนป่า: คลิกบนแผนที่อย่างน้อย 3 จุดเพื่อสร้าง Polygon โซนป่าไม้ ระบบจะคำนวณพื้นที่ (ไร่) ให้อัตโนมัติ"
-                : "โหมดปักหมุดเสาไมค์: คลิกบนแผนที่เพื่อเลือกพิกัดติดตั้งเสาไมโครโฟน หรือกรอกละติจูด/ลองจิจูดด้านขวา"}
+            <button
+              type="button"
+              className={secondary + " gap-2 lg:hidden"}
+              onClick={() => jumpTo(formSection.current)}
+            >
+              <ArrowDown size={16} aria-hidden="true" /> ไปที่ฟอร์ม
+            </button>
+          )}
+          {mode === "polygon" && (
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm">
+                {finished
+                  ? "วาดเสร็จแล้ว ตรวจข้อมูลก่อนบันทึก หรือลากจุดเพื่อแก้ไข"
+                  : "แตะแผนที่เพิ่มจุด ลากหมุดเพื่อแก้ตำแหน่ง หรือเลือกจุดแล้วกดลบ"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className={secondary}
+                  disabled={busy || !points.length}
+                  onClick={() => {
+                    changePoints(points.slice(0, -1));
+                    setSelectedPoint(null);
+                  }}
+                >
+                  ย้อนจุด
+                </button>
+                <button
+                  className={secondary}
+                  disabled={busy || !points.length}
+                  onClick={() => {
+                    changePoints([]);
+                    setSelectedPoint(null);
+                  }}
+                >
+                  ล้างทั้งหมด
+                </button>
+                <button
+                  className={secondary}
+                  disabled={busy || selectedPoint === null}
+                  onClick={() => {
+                    changePoints(points.filter((_, i) => i !== selectedPoint));
+                    setSelectedPoint(null);
+                  }}
+                >
+                  ลบจุดที่เลือก
+                </button>
+                <button
+                  className={primary}
+                  disabled={busy || !!geometryError}
+                  onClick={() => {
+                    setFinished(true);
+                    setError("");
+                    focusEditor("form");
+                  }}
+                >
+                  จบการวาด
+                </button>
+              </div>
+              <p className="text-sm" role="status">
+                {points.length} จุด ·{" "}
+                {geometryError || `พื้นที่ ${area?.toLocaleString()} ไร่`}
+              </p>
             </div>
           )}
-
+          {mode === "station" && (
+            <p className="rounded-lg bg-amber-50 p-3 text-sm">
+              แตะแผนที่เพื่อวางไมค์ หรือกรอกพิกัดในฟอร์ม
+            </p>
+          )}
           <RiskZoneMap
             zones={zones}
             stations={stations}
-            onMapClickCoordinates={handleMapClick}
-            draftPolygonCoords={mode === "new_zone" ? draftPolygon : undefined}
+            editMode={busy ? "view" : mode}
+            selectedZoneId={editingZone}
+            onSelectStation={(id) => {
+              const s = stations.find((s) => s.id === id);
+              if (s) startStation(s);
+            }}
+            onMapClickCoordinates={(p) => {
+              if (busy) return;
+              if (mode === "polygon" && !finished) changePoints([...points, p]);
+              if (mode === "station")
+                setStation({
+                  ...station,
+                  lng: String(p[0]),
+                  lat: String(p[1]),
+                });
+            }}
+            draftPolygonCoords={
+              mode === "polygon" &&
+              points.every(
+                ([lng, lat]) =>
+                  Number.isFinite(lng) &&
+                  Number.isFinite(lat) &&
+                  Math.abs(lng) <= 180 &&
+                  Math.abs(lat) <= 90,
+              )
+                ? points
+                : undefined
+            }
+            onMovePolygonPoint={(index, p) =>
+              changePoints(points.map((old, i) => (i === index ? p : old)))
+            }
+            onSelectPolygonPoint={setSelectedPoint}
+            selectedPolygonPoint={selectedPoint}
             draftPointCoords={
-              mode === "new_station" &&
-              Number.isFinite(Number(stLng)) &&
-              Number.isFinite(Number(stLat))
-                ? [Number(stLng), Number(stLat)]
+              mode === "station" &&
+              station.lng.trim() &&
+              station.lat.trim() &&
+              Number.isFinite(Number(station.lng)) &&
+              Number.isFinite(Number(station.lat)) &&
+              Math.abs(Number(station.lng)) <= 180 &&
+              Math.abs(Number(station.lat)) <= 90
+                ? [Number(station.lng), Number(station.lat)]
                 : null
             }
-            draftRadiusMeters={Number(stRadius) || 350}
-            heightClass="h-[460px]"
+            draftRadiusMeters={
+              Number.isFinite(Number(station.radius))
+                ? Math.max(0, Math.min(100000, Number(station.radius)))
+                : 350
+            }
+            heightClass={
+              mode === "view"
+                ? "h-[300px] lg:h-[400px]"
+                : "h-[320px] lg:h-[440px]"
+            }
           />
-        </div>
-
-        {/* Right Side Form or Station Directory (5 cols) */}
-        <div className="lg:col-span-5">
-          {mode === "new_zone" ? (
-            <form
-              onSubmit={handleSaveZone}
-              className="rounded-lg border-2 border-[#1B4332] bg-white p-5 space-y-3.5"
-            >
-              <div className="flex items-center justify-between border-b border-[#E4ECE6] pb-2.5">
-                <h2 className="text-base font-bold text-[#14241B]">
-                  เพิ่มโซนป่าอนุรักษ์ใหม่ (วาด Polygon)
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setDraftPolygon([])}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#D62828] hover:underline"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  ล้างจุดที่วาด ({draftPolygon.length} จุด)
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    รหัสโซน
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={zoneCode}
-                    onChange={(e) => setZoneCode(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs font-mono-code"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    พื้นที่คำนวณอัตโนมัติ (ไร่)
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={
-                      draftPolygon.length >= 3
-                        ? `${calculatedRai.toLocaleString()} ไร่`
-                        : "คลิกแผนที่อย่างน้อย 3 จุด"
-                    }
-                    className="w-full rounded border border-[#D4DCD5] bg-[#F4F7F4] px-3 py-2 text-xs font-mono-code font-bold text-[#1B4332]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                  ชื่อโซนป่าไม้ *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={zoneName}
-                  onChange={(e) => setZoneName(e.target.value)}
-                  placeholder="เช่น ป่าสงวนแห่งชาติสะเมิง–แม่ขาน"
-                  className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    จังหวัด
-                  </label>
-                  <input
-                    type="text"
-                    value={province}
-                    onChange={(e) => setProvince(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    อำเภอ
-                  </label>
-                  <input
-                    type="text"
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    ระดับความเสี่ยงเริ่มต้น
-                  </label>
-                  <select
-                    value={riskLevel}
-                    onChange={(e) => setRiskLevel(e.target.value as RiskLevel)}
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                  >
-                    <option value="green">สีเขียว (ปกติ)</option>
-                    <option value="yellow">สีเหลือง (เฝ้าระวัง)</option>
-                    <option value="red">สีแดง (เสี่ยงสูง)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    หัวหน้าชุดผู้รับผิดชอบ
-                  </label>
-                  <select
-                    value={officerId}
-                    onChange={(e) => setOfficerId(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                  >
-                    {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.full_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                  รายละเอียดพื้นที่
-                </label>
-                <textarea
-                  rows={2}
-                  value={zoneDesc}
-                  onChange={(e) => setZoneDesc(e.target.value)}
-                  className="w-full rounded border border-[#B8C7BC] p-2.5 text-xs"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={busy || draftPolygon.length < 3 || !zoneName.trim()}
-                className="w-full rounded-lg bg-[#1B4332] py-2.5 text-xs font-semibold text-white hover:bg-[#2D6A4F] disabled:opacity-50"
-              >
-                บันทึกขอบเขตโซนป่าไม้
-              </button>
-            </form>
-          ) : mode === "new_station" ? (
-            <form
-              onSubmit={handleSaveStation}
-              className="rounded-lg border-2 border-[#1B4332] bg-white p-5 space-y-3.5"
-            >
-              <h2 className="text-base font-bold text-[#14241B] border-b border-[#E4ECE6] pb-2.5">
-                {editingStationId
-                  ? `แก้ไขเสาไมโครโฟน ${stCode}`
-                  : "ติดตั้งเสาไมโครโฟนตรวจจับเสียงใหม่"}
-              </h2>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    รหัสเสาไมค์ *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={stCode}
-                    onChange={(e) => setStCode(e.target.value)}
-                    placeholder="เช่น ST-07"
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs font-mono-code"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    สถานะเสา
-                  </label>
-                  <select
-                    value={stStatus}
-                    onChange={(e) =>
-                      setStStatus(e.target.value as StationStatus)
-                    }
-                    className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                  >
-                    <option value="online">ออนไลน์ปกติ</option>
-                    <option value="maintenance">กำลังซ่อมบำรุง</option>
-                    <option value="offline">ขาดการเชื่อมต่อ</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                  ชื่อจุดติดตั้งเสาไมค์ *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={stName}
-                  onChange={(e) => setStName(e.target.value)}
-                  placeholder="เช่น เสาไมค์ดอยสุเทพ-ปุย จุดสกัดที่ 2"
-                  className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                  สังกัดโซนป่าไม้
-                </label>
-                <select
-                  value={stZoneId}
-                  onChange={(e) => setStZoneId(e.target.value)}
-                  className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                >
-                  {zones.map((z) => (
-                    <option key={z.id} value={z.id}>
-                      {z.zone_code} · {z.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    ละติจูด (Lat)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    value={stLat}
-                    onChange={(e) => setStLat(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-2.5 py-2 text-xs font-mono-code"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    ลองจิจูด (Lng)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    value={stLng}
-                    onChange={(e) => setStLng(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-2.5 py-2 text-xs font-mono-code"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                    รัศมีรับเสียง (ม.)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={stRadius}
-                    onChange={(e) => setStRadius(e.target.value)}
-                    className="w-full rounded border border-[#B8C7BC] px-2.5 py-2 text-xs font-mono-code"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                  หมายเหตุทางเทคนิค
-                </label>
-                <input
-                  type="text"
-                  value={stNotes}
-                  onChange={(e) => setStNotes(e.target.value)}
-                  placeholder="เช่น โซลาร์เซลล์ 50W พร้อมไมค์รอบทิศทาง"
-                  className="w-full rounded border border-[#B8C7BC] px-3 py-2 text-xs"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={busy}
-                className="w-full rounded-lg bg-[#1B4332] py-2.5 text-xs font-semibold text-white hover:bg-[#2D6A4F] disabled:opacity-50"
-              >
-                บันทึกข้อมูลเสาไมโครโฟน
-              </button>
-            </form>
-          ) : (
-            <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-bold text-[#14241B]">
-                  ทำเนียบเสาไมโครโฟนตรวจจับเสียง ({stations.length} เสา)
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setMode("new_station")}
-                  className="text-xs font-semibold text-[#1B4332] hover:underline"
-                >
-                  + เพิ่มเสาใหม่
-                </button>
-              </div>
-              <div className="space-y-2.5 max-h-[395px] overflow-y-auto pr-1">
-                {stations.map((st) => (
+          {mode === "polygon" && points.length > 0 && (
+            <details className={panel}>
+              <summary className="cursor-pointer">
+                แก้พิกัดจุดด้วยตัวเลข ({points.length} จุด)
+              </summary>
+              <div className="max-h-72 space-y-2 overflow-y-auto">
+                {points.map((p, i) => (
                   <div
-                    key={st.id}
-                    className="rounded-lg border border-[#D4DCD5] bg-[#F8FAF8] p-3 flex items-start justify-between gap-2"
+                    key={i}
+                    className="grid grid-cols-[auto_1fr_1fr] items-center gap-2"
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono-code text-xs font-bold text-[#1B4332]">
-                          {st.station_code}
-                        </span>
-                        <span className="text-xs font-bold text-[#14241B]">
-                          {st.name}
-                        </span>
-                      </div>
-                      <p className="font-mono-code text-[11px] text-[#526358] mt-0.5">
-                        GPS: {st.lat.toFixed(4)}, {st.lng.toFixed(4)} • รัศมี{" "}
-                        {st.radius_meters} ม. • แบต {st.battery_percent}%
-                      </p>
-                      <div className="mt-1.5">
-                        <StationStatusBadge status={st.status} />
-                      </div>
-                    </div>
                     <button
-                      type="button"
-                      onClick={() => startEditStation(st)}
-                      className="rounded border border-[#B8C7BC] bg-white px-2.5 py-1 text-xs font-semibold text-[#1B4332] hover:bg-[#EBF2ED]"
+                      className={secondary}
+                      aria-pressed={selectedPoint === i}
+                      onClick={() => setSelectedPoint(i)}
                     >
-                      แก้ไข
+                      จุด {i + 1}
                     </button>
+                    <label className="text-xs">
+                      ลองจิจูด
+                      <input
+                        aria-label={`ลองจิจูดจุด ${i + 1}`}
+                        type="number"
+                        step="any"
+                        className={control}
+                        value={p[0]}
+                        onChange={(e) =>
+                          changePoints(
+                            points.map((old, j) =>
+                              j === i ? [Number(e.target.value), old[1]] : old,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="text-xs">
+                      ละติจูด
+                      <input
+                        aria-label={`ละติจูดจุด ${i + 1}`}
+                        type="number"
+                        step="any"
+                        className={control}
+                        value={p[1]}
+                        onChange={(e) =>
+                          changePoints(
+                            points.map((old, j) =>
+                              j === i ? [old[0], Number(e.target.value)] : old,
+                            ),
+                          )
+                        }
+                      />
+                    </label>
                   </div>
                 ))}
               </div>
-            </section>
+            </details>
           )}
-        </div>
-      </div>
-
-      {/* Forest Zones Cards Grid */}
-      <section className="space-y-3">
-        <h2 className="text-base font-bold text-[#14241B]">
-          รายการโซนป่าอนุรักษ์ทั้งหมด ({zones.length} โซน)
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {zones.map((zone) => {
-            const zoneStations = stations.filter((s) => s.zone_id === zone.id);
-            return (
-              <div
-                key={zone.id}
-                className="rounded-lg border border-[#D4DCD5] bg-white p-4 flex flex-col justify-between gap-3"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono-code text-xs font-bold text-[#526358]">
-                      {zone.zone_code}
-                    </span>
-                    <RiskBadge level={zone.current_risk_level} />
-                  </div>
-                  <h3 className="mt-1 text-base font-bold text-[#14241B]">
-                    {zone.name}
-                  </h3>
-                  <p className="text-xs text-[#526358]">
-                    อ.{zone.district} จ.{zone.province} • พื้นที่ประมาณ{" "}
-                    <strong className="font-mono-code text-[#14241B]">
-                      {zone.area_rai?.toLocaleString()}
-                    </strong>{" "}
-                    ไร่ • ติดตั้งเสาไมค์{" "}
-                    <strong className="font-mono-code text-[#1B4332]">
-                      {zoneStations.length}
-                    </strong>{" "}
-                    เสา
-                  </p>
-                  {zone.description && (
-                    <p className="mt-2 text-xs text-[#435449]">
-                      {zone.description}
-                    </p>
+        </section>
+        {mode !== "view" && (
+          <section
+            ref={formSection}
+            tabIndex={-1}
+            aria-label="ฟอร์มจัดการโซนและเสาไมค์"
+            className="min-w-0 scroll-mt-20 space-y-3"
+          >
+            <button
+              type="button"
+              className={secondary + " gap-2 lg:hidden"}
+              onClick={() => jumpTo(mapSection.current)}
+            >
+              <ArrowUp size={16} aria-hidden="true" /> กลับไปที่แผนที่
+            </button>
+            {error && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">
+                {error}
+              </p>
+            )}
+            {mode === "polygon" ? (
+              <form onSubmit={saveZone} className={panel}>
+                <h2 className="text-lg font-bold">
+                  {editingZone ? "แก้ไขขอบเขตโซน" : "เพิ่มโซนป่า"}
+                </h2>
+                <fieldset
+                  disabled={busy}
+                  className="grid min-w-0 gap-3 sm:grid-cols-2"
+                >
+                  {(
+                    [
+                      { key: "code", label: "รหัสโซน" },
+                      { key: "name", label: "ชื่อโซนป่า" },
+                      { key: "province", label: "จังหวัด" },
+                      { key: "district", label: "อำเภอ" },
+                    ] as const
+                  ).map((f) => (
+                    <label key={f.key} className="block text-sm font-semibold">
+                      {f.label}
+                      <input
+                        className={control + " mt-1"}
+                        value={zone[f.key]}
+                        required={f.key === "code" || f.key === "name"}
+                        onChange={(e) =>
+                          setZone({ ...zone, [f.key]: e.target.value })
+                        }
+                      />
+                    </label>
+                  ))}
+                  <label className="block text-sm font-semibold">
+                    ความเสี่ยง
+                    <select
+                      className={control}
+                      value={zone.risk}
+                      onChange={(e) =>
+                        setZone({ ...zone, risk: e.target.value as RiskLevel })
+                      }
+                    >
+                      <option value="green">ปกติ</option>
+                      <option value="yellow">เฝ้าระวัง</option>
+                      <option value="red">เสี่ยงสูง</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm font-semibold">
+                    ผู้รับผิดชอบ
+                    <select
+                      className={control}
+                      value={zone.officer}
+                      onChange={(e) =>
+                        setZone({ ...zone, officer: e.target.value })
+                      }
+                    >
+                      <option value="">ยังไม่กำหนด</option>
+                      {profiles.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.full_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-semibold sm:col-span-2">
+                    รายละเอียด
+                    <textarea
+                      className={control}
+                      value={zone.description}
+                      onChange={(e) =>
+                        setZone({ ...zone, description: e.target.value })
+                      }
+                    />
+                  </label>
+                  {outside.length > 0 && (
+                    <div className="rounded-lg bg-amber-50 p-3 text-sm sm:col-span-2">
+                      <p>ไมค์ที่สังกัดอยู่นอกขอบเขตใหม่:</p>
+                      <ul>
+                        {outside.map((s) => (
+                          <li key={s.id}>
+                            {s.station_code} · {s.name}
+                          </li>
+                        ))}
+                      </ul>
+                      <label className="flex min-h-11 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={acceptOutside}
+                          onChange={(e) => setAcceptOutside(e.target.checked)}
+                        />
+                        ยืนยันขอบเขตนี้และคงสังกัดไมค์เดิม
+                      </label>
+                    </div>
                   )}
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-[#E4ECE6]">
-                  <div className="flex flex-wrap gap-1.5">
-                    {zoneStations.map((s) => (
-                      <span
-                        key={s.id}
-                        className="rounded bg-[#EBF2ED] px-2 py-0.5 font-mono-code text-[11px] font-semibold text-[#1B4332]"
+                  <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
+                    <button
+                      type="button"
+                      className={secondary}
+                      onClick={cancel}
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      className={primary}
+                      disabled={
+                        !finished ||
+                        !!geometryError ||
+                        (outside.length > 0 && !acceptOutside)
+                      }
+                    >
+                      บันทึกขอบเขต
+                    </button>
+                  </div>
+                </fieldset>
+              </form>
+            ) : mode === "station" ? (
+              <form onSubmit={saveStation} className={panel}>
+                <h2 className="text-lg font-bold">
+                  {editingStation ? "แก้ไขไมค์" : "เพิ่มไมค์"}
+                </h2>
+                <fieldset
+                  disabled={busy}
+                  className="grid min-w-0 gap-3 sm:grid-cols-2"
+                >
+                  {(
+                    [
+                      { key: "code", label: "รหัสไมค์" },
+                      { key: "name", label: "ชื่อจุดติดตั้ง" },
+                    ] as const
+                  ).map((f) => (
+                    <label key={f.key} className="block text-sm font-semibold">
+                      {f.label}
+                      <input
+                        className={control}
+                        value={station[f.key]}
+                        required
+                        onChange={(e) =>
+                          setStation({ ...station, [f.key]: e.target.value })
+                        }
+                      />
+                    </label>
+                  ))}
+                  <label className="block text-sm font-semibold">
+                    สังกัดโซนป่าไม้
+                    <select
+                      className={control}
+                      value={station.zone}
+                      onChange={(e) =>
+                        setStation({ ...station, zone: e.target.value })
+                      }
+                    >
+                      <option value="">ไม่สังกัดโซน</option>
+                      {zones.map((z) => (
+                        <option key={z.id} value={z.id}>
+                          {z.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3 sm:col-span-2 sm:grid-cols-3">
+                    {(
+                      [
+                        { key: "lat", label: "ละติจูด" },
+                        { key: "lng", label: "ลองจิจูด" },
+                        { key: "radius", label: "รัศมี (เมตร)" },
+                      ] as const
+                    ).map((f) => (
+                      <label
+                        key={f.key}
+                        className="block text-sm font-semibold"
                       >
-                        📡 {s.station_code}
-                      </span>
+                        {f.label}
+                        <input
+                          className={control}
+                          type="number"
+                          step="any"
+                          required
+                          value={station[f.key]}
+                          onChange={(e) =>
+                            setStation({ ...station, [f.key]: e.target.value })
+                          }
+                        />
+                      </label>
                     ))}
                   </div>
-                  <Link
-                    href={`/zones/${zone.id}`}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B4332] hover:underline"
-                  >
-                    <span>ดูรายละเอียดโซน</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-              </div>
+                  <label className="block text-sm font-semibold">
+                    สถานะ
+                    <select
+                      className={control}
+                      value={station.status}
+                      onChange={(e) =>
+                        setStation({
+                          ...station,
+                          status: e.target.value as StationStatus,
+                        })
+                      }
+                    >
+                      <option value="online">ออนไลน์</option>
+                      <option value="offline">ออฟไลน์</option>
+                      <option value="maintenance">ซ่อมบำรุง</option>
+                    </select>
+                  </label>
+                  <label className="block text-sm font-semibold sm:col-span-2">
+                    หมายเหตุ
+                    <textarea
+                      className={control}
+                      value={station.notes}
+                      onChange={(e) =>
+                        setStation({ ...station, notes: e.target.value })
+                      }
+                    />
+                  </label>
+                  <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
+                    <button
+                      type="button"
+                      className={secondary}
+                      onClick={cancel}
+                    >
+                      ยกเลิก
+                    </button>
+                    <button className={primary}>บันทึกไมค์</button>
+                  </div>
+                </fieldset>
+              </form>
+            ) : null}
+          </section>
+        )}
+      </div>
+      {mode === "view" && (
+        <section aria-label="รายการโซนและเสาไมค์" className="space-y-2">
+          <div
+            role="tablist"
+            aria-label="ประเภทรายการ"
+            className="flex flex-wrap gap-2"
+          >
+            {directoryTabs.map((item) => {
+              const selected = tab === item;
+              return (
+                <button
+                  key={item}
+                  ref={tabRefs[item]}
+                  id={`directory-tab-${item}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`directory-panel-${item}`}
+                  tabIndex={selected ? 0 : -1}
+                  className={selected ? primary : secondary}
+                  onClick={() => setTab(item)}
+                  onKeyDown={(event) => {
+                    const next =
+                      event.key === "Home"
+                        ? "zones"
+                        : event.key === "End"
+                          ? "stations"
+                          : event.key === "ArrowLeft" ||
+                              event.key === "ArrowRight"
+                            ? item === "zones"
+                              ? "stations"
+                              : "zones"
+                            : undefined;
+                    if (!next) return;
+                    event.preventDefault();
+                    setTab(next);
+                    tabRefs[next].current?.focus();
+                  }}
+                >
+                  {item === "zones"
+                    ? `โซนป่า (${zones.length})`
+                    : `เสาไมค์ (${stations.length})`}
+                </button>
+              );
+            })}
+          </div>
+          {directoryTabs.map((item) => (
+            <div
+              key={item}
+              id={`directory-panel-${item}`}
+              role="tabpanel"
+              aria-labelledby={`directory-tab-${item}`}
+              hidden={item !== tab}
+              className="space-y-2"
+            >
+              {item === tab && (
+                <>
+                  <input
+                    type="search"
+                    className={control + " sm:max-w-sm"}
+                    aria-label={item === "zones" ? "ค้นหาโซนป่า" : "ค้นหาเสาไมค์"}
+                    placeholder={
+                      item === "zones" ? "ค้นหาชื่อหรือรหัสโซน" : "ค้นหาชื่อหรือรหัสไมค์"
+                    }
+                    value={queries[item]}
+                    onChange={(e) =>
+                      setQueries({ ...queries, [item]: e.target.value })
+                    }
+                  />
+                  {!loading &&
+                    !loadError &&
+                    !visibleZones.length &&
+                    !visibleStations.length && (
+                      <p className="rounded-lg border border-[#D4DCD5] bg-white p-3 text-sm text-[#526358]">
+                        {query
+                          ? "ไม่พบรายการที่ตรงกับการค้นหา"
+                          : item === "zones"
+                            ? "ยังไม่มีโซนป่า"
+                            : "ยังไม่มีเสาไมค์"}
+                      </p>
+                    )}
+                  <div className="grid gap-2 xl:grid-cols-2">
+                    {visibleZones.map((z) => (
+                      <article key={z.id} className={compactCard}>
+                        <div className="min-w-0 flex-1 basis-52">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="break-words font-semibold">
+                              {z.name}
+                            </h3>
+                            <RiskBadge size="xs" level={z.current_risk_level} />
+                          </div>
+                          <p className="mt-1 text-xs text-[#526358]">
+                            {z.zone_code} · {z.area_rai?.toLocaleString()} ไร่ ·{" "}
+                            {stations.filter((s) => s.zone_id === z.id).length}{" "}
+                            ไมค์
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className={secondary}
+                            onClick={() => startZone(z)}
+                          >
+                            แก้ไขขอบเขต
+                          </button>
+                          <Link className={secondary} href={"/zones/" + z.id}>
+                            รายละเอียดโซน
+                          </Link>
+                          {admin && (
+                            <button
+                              type="button"
+                              className={secondary + " text-red-800"}
+                              onClick={() => setDeletingZone(z)}
+                            >
+                              ลบโซน
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                    {visibleStations.map((s) => (
+                      <article key={s.id} className={compactCard}>
+                        <div className="min-w-0 flex-1 basis-48">
+                          <h3 className="break-words font-semibold">
+                            {s.station_code} · {s.name}
+                          </h3>
+                          <p className="mt-1 flex items-start gap-1.5 text-xs text-[#526358]">
+                            <MapPin
+                              size={14}
+                              className="shrink-0"
+                              aria-hidden="true"
+                            />
+                            {zones.find((z) => z.id === s.zone_id)?.name ||
+                              "ไม่สังกัดโซน"}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className={secondary}
+                            onClick={() => startStation(s)}
+                          >
+                            แก้ไขไมค์
+                          </button>
+                          {admin && (
+                            <button
+                              className={secondary + " text-red-800"}
+                              onClick={() => setDeleting(s)}
+                            >
+                              ลบไมค์
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+      {deletingZone && (
+        <DeleteDialog
+          kind="zone"
+          id={deletingZone.id}
+          name={
+            deletingZone.zone_code
+              ? `${deletingZone.zone_code} · ${deletingZone.name}`
+              : deletingZone.name
+          }
+          onClose={() => setDeletingZone(undefined)}
+          onDeleted={() => {
+            setZones((list) =>
+              list.filter((zone) => zone.id !== deletingZone.id),
             );
-          })}
-        </div>
-      </section>
+            if (editingZone === deletingZone.id) setEditingZone(undefined);
+            setDeletingZone(undefined);
+            setFeedback("ลบโซนป่าออกจากรายการใช้งานแล้ว");
+            requestAnimationFrame(() => zoneTab.current?.focus());
+          }}
+        />
+      )}
+      {deleting && (
+        <DeleteDialog
+          kind="station"
+          id={deleting.id}
+          name={`${deleting.station_code} · ${deleting.name}`}
+          onClose={() => setDeleting(undefined)}
+          onDeleted={() => {
+            setStations((list) => list.filter((s) => s.id !== deleting.id));
+            if (editingStation === deleting.id) cancel();
+            setDeleting(undefined);
+            setFeedback("ลบไมค์จากรายการใช้งานแล้ว ประวัติเดิมยังคงอยู่");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { createClient } from "./client";
+import { readZones,readStations,writeZone,writeStation } from "@/lib/directory/service";
+import { listAccounts, createAccountRecord, requireAccountAdmin, changeAccountRole, resetAccountPassword } from "@/lib/accounts/service";
+import type { CreateAccountInput } from "@/lib/accounts/validation";
 import type { AudioModelId } from "@/lib/ml-contract";
 import {
   INITIAL_NOTIFICATION_LOGS,
@@ -59,7 +62,7 @@ function loadLocalCache(): OperationalCache {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<OperationalCache>;
       return {
-        profiles: parsed.profiles?.length ? parsed.profiles : structuredClone(INITIAL_PROFILES),
+        profiles: parsed.profiles ?? structuredClone(INITIAL_PROFILES),
         zones: parsed.zones?.length ? parsed.zones : structuredClone(INITIAL_ZONES),
         stations: parsed.stations?.length ? parsed.stations : structuredClone(INITIAL_STATIONS),
         reports: parsed.reports?.length ? parsed.reports : structuredClone(INITIAL_REPORTS),
@@ -118,48 +121,19 @@ export const rakforestRepo = {
   // ==========================================================================
   async getCurrentProfile(): Promise<Profile | null> {
     const supabase = createClient();
-    const cache = loadLocalCache();
-
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        const { data: dbProfile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (dbProfile) {
-          if (typeof window !== "undefined") {
-            localStorage.setItem(SESSION_USER_KEY, JSON.stringify(dbProfile));
-          }
-          return dbProfile as Profile;
-        }
-
-        // Match by email if profile row has different UUID in seed
-        const matched = cache.profiles.find(
-          (p) => p.email?.toLowerCase() === user.email?.toLowerCase()
-        );
-        if (matched) return matched;
-      }
-    } catch {
-      // Fallback to stored profile session
+    let id: string | undefined;
+    try {const {data:{user}}=await supabase.auth.getUser();id=user?.id;}catch { /* Use the existing prototype session ID below. */ }
+    if(!id&&typeof window!=="undefined"){
+      try {id=JSON.parse(localStorage.getItem(SESSION_USER_KEY)||"null")?.id;}catch{return null;}
     }
-
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(SESSION_USER_KEY);
-      if (saved) {
-        try {
-          return JSON.parse(saved) as Profile;
-        } catch {
-          return null;
-        }
-      }
+    if(!id)return null;
+    const {data,error}=await supabase.from("profiles").select("*").eq("id",id).single();
+    if(error)return null;
+    if(data.deleted_at||data.role==="suspended"||data.role==="pending_verification"){
+      if(typeof window!=="undefined")localStorage.removeItem(SESSION_USER_KEY);
+      return null;
     }
-    return null;
+    return data as Profile;
   },
 
   async signIn(identifier: string, password: string): Promise<Profile> {
@@ -191,7 +165,7 @@ export const rakforestRepo = {
           if (p.role === "pending_verification") {
             throw new Error("บัญชีของคุณอยู่ระหว่างรอการอนุมัติยืนยันตัวตนจากผู้ดูแลระบบ");
           }
-          if (p.role === "suspended") {
+          if (p.deleted_at || p.role === "suspended") {
             throw new Error("บัญชีนี้ถูกระงับสิทธิ์การใช้งานชั่วคราว กรุณาติดต่อศูนย์สั่งการ");
           }
           if (typeof window !== "undefined") {
@@ -210,7 +184,7 @@ export const rakforestRepo = {
     }
 
     // 2. Match against operational profiles (by email or employee_code)
-    const allProfiles = await this.getProfiles();
+    const allProfiles = await this.getProfiles({strict:true});
     const matched = allProfiles.find(
       (p) =>
         p.email?.toLowerCase() === clean ||
@@ -228,7 +202,7 @@ export const rakforestRepo = {
     if (matched.role === "pending_verification") {
       throw new Error("บัญชีของคุณอยู่ระหว่างรอการอนุมัติยืนยันตัวตนจากผู้ดูแลระบบ");
     }
-    if (matched.role === "suspended") {
+    if (matched.deleted_at || matched.role === "suspended") {
       throw new Error("บัญชีนี้ถูกระงับสิทธิ์การใช้งานชั่วคราว กรุณาติดต่อศูนย์สั่งการ");
     }
 
@@ -254,146 +228,16 @@ export const rakforestRepo = {
   // FOREST ZONES & SENSOR STATIONS
   // ==========================================================================
   async getZones(): Promise<ForestZone[]> {
-    const supabase = createClient();
-    const cache = loadLocalCache();
-    try {
-      const { data, error } = await supabase
-        .from("forest_zones")
-        .select("*")
-        .order("created_at", { ascending: true });
-      if (!error && data && data.length > 0) {
-        cache.zones = data as ForestZone[];
-        saveLocalCache(cache);
-        return cache.zones;
-      }
-    } catch {
-      // fallback to cache
-    }
-    return cache.zones;
+    const zones=await readZones();const cache=loadLocalCache();cache.zones=zones;saveLocalCache(cache);return zones;
   },
-
-  async saveZone(
-    zone: Partial<ForestZone> & { name: string; polygon_coords: [number, number][] }
-  ): Promise<ForestZone> {
-    const supabase = createClient();
-    const cache = loadLocalCache();
-    const isUpdate = Boolean(zone.id && cache.zones.some((z) => z.id === zone.id));
-    const record: ForestZone = {
-      id: zone.id ?? crypto.randomUUID(),
-      zone_code:
-        zone.zone_code?.trim() ||
-        `ZN-${String(cache.zones.length + 1).padStart(2, "0")}`,
-      name: zone.name.trim(),
-      province: zone.province?.trim() || "เชียงใหม่",
-      district: zone.district?.trim() || "เมือง",
-      area_rai: zone.area_rai ?? 12000,
-      polygon_coords: zone.polygon_coords,
-      current_risk_level: zone.current_risk_level ?? "green",
-      responsible_officer_id: zone.responsible_officer_id ?? null,
-      description: zone.description?.trim() || null,
-      created_at: zone.created_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      await supabase.from("forest_zones").upsert({
-        id: record.id,
-        zone_code: record.zone_code,
-        name: record.name,
-        province: record.province,
-        district: record.district,
-        area_rai: record.area_rai,
-        polygon_coords: record.polygon_coords,
-        current_risk_level: record.current_risk_level,
-        responsible_officer_id: record.responsible_officer_id,
-        description: record.description,
-        updated_at: record.updated_at,
-      });
-    } catch {
-      // keep in local cache as well
-    }
-
-    if (isUpdate) {
-      cache.zones = cache.zones.map((z) => (z.id === record.id ? record : z));
-    } else {
-      cache.zones.push(record);
-    }
-    saveLocalCache(cache);
-    return record;
+  async saveZone(zone:Partial<ForestZone>&{name:string;polygon_coords:[number,number][]}):Promise<ForestZone>{
+    const saved=await writeZone(zone);const cache=loadLocalCache();cache.zones=[saved,...cache.zones.filter(z=>z.id!==saved.id)];saveLocalCache(cache);return saved;
   },
-
-  async getStations(): Promise<SensorStation[]> {
-    const supabase = createClient();
-    const cache = loadLocalCache();
-    try {
-      const { data, error } = await supabase
-        .from("sensor_stations")
-        .select("*")
-        .order("station_code", { ascending: true });
-      if (!error && data && data.length > 0) {
-        cache.stations = data as SensorStation[];
-        saveLocalCache(cache);
-        return cache.stations;
-      }
-    } catch {
-      // fallback
-    }
-    return cache.stations;
+  async getStations():Promise<SensorStation[]>{
+    const stations=await readStations();const cache=loadLocalCache();cache.stations=[...stations,...cache.stations.filter(s=>s.deleted_at&&!stations.some(n=>n.id===s.id))];saveLocalCache(cache);return stations;
   },
-
-  async saveStation(
-    station: Partial<SensorStation> & {
-      station_code: string;
-      name: string;
-      lat: number;
-      lng: number;
-    }
-  ): Promise<SensorStation> {
-    const supabase = createClient();
-    const cache = loadLocalCache();
-    const existing = cache.stations.find(
-      (s) => s.id === station.id || s.station_code === station.station_code
-    );
-    const record: SensorStation = {
-      id: station.id ?? existing?.id ?? crypto.randomUUID(),
-      station_code: station.station_code.trim().toUpperCase(),
-      name: station.name.trim(),
-      zone_id: station.zone_id ?? existing?.zone_id ?? cache.zones[0]?.id ?? null,
-      lat: Number(station.lat),
-      lng: Number(station.lng),
-      radius_meters: Number(station.radius_meters ?? 350),
-      status: station.status ?? "online",
-      battery_percent: Number(station.battery_percent ?? 100),
-      last_heartbeat_at: new Date().toISOString(),
-      notes: station.notes ?? null,
-      created_at: existing?.created_at ?? new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      await supabase.from("sensor_stations").upsert({
-        id: record.id,
-        station_code: record.station_code,
-        name: record.name,
-        zone_id: record.zone_id,
-        lat: record.lat,
-        lng: record.lng,
-        radius_meters: record.radius_meters,
-        status: record.status,
-        battery_percent: record.battery_percent,
-        last_heartbeat_at: record.last_heartbeat_at,
-        notes: record.notes,
-        updated_at: record.updated_at,
-      });
-    } catch {
-      // keep in local cache
-    }
-
-    const idx = cache.stations.findIndex((s) => s.id === record.id);
-    if (idx >= 0) cache.stations[idx] = record;
-    else cache.stations.push(record);
-    saveLocalCache(cache);
-    return record;
+  async saveStation(station:Partial<SensorStation>&{station_code:string;name:string;lat:number;lng:number}):Promise<SensorStation>{
+    const saved=await writeStation(station);const cache=loadLocalCache();cache.stations=[saved,...cache.stations.filter(s=>s.id!==saved.id)];saveLocalCache(cache);return saved;
   },
 
   // ==========================================================================
@@ -409,7 +253,11 @@ export const rakforestRepo = {
         .select(
           `*,
           report_audio(*, ai_classifications(*)),
-          report_evidence(*)`
+          report_evidence(*),
+          forest_zones(*),
+          sensor_stations(*),
+          reporter:profiles!reports_reporter_id_fkey(*),
+          assignee:profiles!reports_assigned_to_fkey(*)`
         )
         .order("created_at", { ascending: false });
 
@@ -458,14 +306,17 @@ export const rakforestRepo = {
     const supabase = createClient();
     const cache = loadLocalCache();
     const profile = await this.getCurrentProfile();
+    if(!profile)throw new Error("กรุณาเข้าสู่ระบบใหม่ บัญชีอาจถูกระงับหรือลบแล้ว");
 
     const station = params.stationId
       ? cache.stations.find(
           (s) => s.id === params.stationId || s.station_code === params.stationId
         )
       : null;
+    if(params.stationId && (!station || station.deleted_at))throw new Error("ไมค์นี้ไม่พร้อมใช้งาน กรุณาเลือกใหม่");
+    if(!profile)throw new Error("กรุณาเข้าสู่ระบบใหม่");
     const zoneId =
-      params.zoneId ?? station?.zone_id ?? cache.zones[0]?.id ?? null;
+      params.zoneId !== undefined ? params.zoneId : station?.zone_id ?? null;
 
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -610,7 +461,7 @@ export const rakforestRepo = {
 
     // Persist to Supabase tables if available
     try {
-      await supabase.from("reports").insert({
+      const {error:reportError}=await supabase.from("reports").insert({
         id: newReport.id,
         report_code: newReport.report_code,
         source_type: newReport.source_type,
@@ -624,6 +475,7 @@ export const rakforestRepo = {
         risk_level: newReport.risk_level,
       });
 
+      if(reportError)throw new Error("บันทึกรายงานไม่สำเร็จ ไมค์หรือเจ้าหน้าที่อาจถูกลบ กรุณาโหลดข้อมูลใหม่");
       if (params.audioFile) {
         await supabase.from("report_audio").insert({
           id: audioId,
@@ -656,21 +508,8 @@ export const rakforestRepo = {
           }))
         );
       }
-    } catch {
-      // Local cache handles persistence seamlessly
-    }
-
-    // Update zone risk if red/yellow
-    if (zoneId && riskLevel === "red") {
-      cache.zones = cache.zones.map((z) =>
-        z.id === zoneId ? { ...z, current_risk_level: "red" } : z
-      );
-    } else if (zoneId && riskLevel === "yellow") {
-      cache.zones = cache.zones.map((z) =>
-        z.id === zoneId && z.current_risk_level === "green"
-          ? { ...z, current_risk_level: "yellow" }
-          : z
-      );
+    } catch (error) {
+      throw error instanceof Error?error:new Error("บันทึกรายงานไม่สำเร็จ");
     }
 
     cache.reports.unshift(newReport);
@@ -712,6 +551,7 @@ export const rakforestRepo = {
     const supabase = createClient();
     const cache = loadLocalCache();
     const profile = await this.getCurrentProfile();
+    if(!profile)throw new Error("กรุณาเข้าสู่ระบบใหม่ บัญชีอาจถูกระงับหรือลบแล้ว");
     const now = new Date().toISOString();
 
     const idx = cache.reports.findIndex((r) => r.id === params.reportId);
@@ -741,20 +581,8 @@ export const rakforestRepo = {
       created_at: now,
     });
 
-    try {
-      await supabase
-        .from("reports")
-        .update({
-          status: "dispatched",
-          assigned_to: params.assigneeId,
-          dispatch_note: params.dispatchNote.trim(),
-          dispatched_at: now,
-          updated_at: now,
-        })
-        .eq("id", params.reportId);
-    } catch {
-      // local cache updated
-    }
+    const {data: saved,error: dispatchError}=await supabase.from("reports").update({status:"dispatched",assigned_to:params.assigneeId,dispatch_note:params.dispatchNote.trim(),dispatched_at:now,updated_at:now}).eq("id",params.reportId).select("id").single();
+    if(dispatchError||!saved)throw new Error("มอบหมายงานไม่สำเร็จ เจ้าหน้าที่อาจถูกลบหรือข้อมูลเปลี่ยนแล้ว กรุณาโหลดใหม่");
 
     saveLocalCache(cache);
 
@@ -787,6 +615,7 @@ export const rakforestRepo = {
     const supabase = createClient();
     const cache = loadLocalCache();
     const profile = await this.getCurrentProfile();
+    if(!profile)throw new Error("กรุณาเข้าสู่ระบบใหม่ บัญชีอาจถูกระงับหรือลบแล้ว");
     const now = new Date().toISOString();
 
     const idx = cache.reports.findIndex((r) => r.id === reportId);
@@ -841,6 +670,7 @@ export const rakforestRepo = {
     const supabase = createClient();
     const cache = loadLocalCache();
     const profile = await this.getCurrentProfile();
+    if(!profile)throw new Error("กรุณาเข้าสู่ระบบใหม่ บัญชีอาจถูกระงับหรือลบแล้ว");
     const now = new Date().toISOString();
 
     const idx = cache.reports.findIndex((r) => r.id === params.reportId);
@@ -926,6 +756,7 @@ export const rakforestRepo = {
     const supabase = createClient();
     const cache = loadLocalCache();
     const profile = await this.getCurrentProfile();
+    if(!profile)throw new Error("กรุณาเข้าสู่ระบบใหม่ บัญชีอาจถูกระงับหรือลบแล้ว");
     const now = new Date().toISOString();
 
     const idx = cache.reports.findIndex((r) => r.id === params.reportId);
@@ -979,241 +810,52 @@ export const rakforestRepo = {
   // ==========================================================================
   // ACCOUNTS & VERIFICATION STEPPER
   // ==========================================================================
-  async getProfiles(): Promise<Profile[]> {
-    const supabase = createClient();
+  async getProfiles(options: { strict?: boolean } = {}): Promise<Profile[]> {
     const cache = loadLocalCache();
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
-        cache.profiles = data as Profile[];
-        saveLocalCache(cache);
-        return cache.profiles;
-      }
-    } catch {
-      // fallback
+      const profiles = await listAccounts();
+      cache.profiles = profiles;
+      saveLocalCache(cache);
+      return profiles;
+    } catch (error) {
+      if (options.strict) throw error;
+      return cache.profiles.filter(p=>!p.deleted_at);
     }
-    return cache.profiles;
   },
 
-  async createAccountStep1(params: {
-    employee_code: string;
-    full_name: string;
-    email: string;
-    phone: string;
-    position: string;
-    department: string;
-    targetRole: UserRole;
-    assigned_zone_ids: string[];
-    id_card_file_url?: string | null;
-    password?: string;
-  }): Promise<{ profile: Profile; otpCode: string }> {
-    const supabase = createClient();
-    const cache = loadLocalCache();
-    const otpCode = String(Math.floor(100000 + Math.random() * 900000));
-    const userPassword = params.password?.trim() || "RakForest2026!";
-    const newProfile: Profile = {
-      id: crypto.randomUUID(),
-      employee_code: params.employee_code.trim().toUpperCase(),
-      email: params.email.trim().toLowerCase(),
-      full_name: params.full_name.trim(),
-      phone: params.phone.trim(),
-      position: params.position.trim(),
-      department: params.department.trim(),
-      role: "pending_verification",
-      assigned_zone_ids: params.assigned_zone_ids,
-      id_card_file_url: params.id_card_file_url ?? null,
-      password_hash: userPassword,
-      verification_status: "otp_sent",
-      otp_code: otpCode,
-      otp_expires_at: new Date(Date.now() + 15 * 60000).toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      await supabase.from("profiles").insert(newProfile);
-    } catch {
-      // fallback to cache
-    }
-
-    cache.profiles.unshift(newProfile);
-    saveLocalCache(cache);
-    return { profile: newProfile, otpCode };
-  },
-
-  async verifyAccountOtp(profileId: string, otpInput: string): Promise<Profile> {
-    const cache = loadLocalCache();
-    const idx = cache.profiles.findIndex((p) => p.id === profileId);
-    if (idx === -1) throw new Error("ไม่พบบัญชีที่ต้องการยืนยัน");
-
-    const current = cache.profiles[idx];
-    if (current.otp_code && current.otp_code !== otpInput.trim()) {
-      throw new Error("รหัส OTP ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง");
-    }
-
-    const updated: Profile = {
-      ...current,
-      verification_status: "otp_verified",
-      updated_at: new Date().toISOString(),
-    };
-    cache.profiles[idx] = updated;
-    saveLocalCache(cache);
-    return updated;
-  },
-
-  async approveAccountRole(
-    profileId: string,
-    approvedRole: UserRole
-  ): Promise<Profile> {
-    const supabase = createClient();
-    const cache = loadLocalCache();
+  async createAccount(input: CreateAccountInput, draftId: string): Promise<Profile> {
     const actor = await this.getCurrentProfile();
-    const now = new Date().toISOString();
-
-    const idx = cache.profiles.findIndex((p) => p.id === profileId);
-    if (idx === -1) throw new Error("ไม่พบบัญชีผู้ใช้");
-
-    const updated: Profile = {
-      ...cache.profiles[idx],
-      role: approvedRole,
-      verification_status: approvedRole === "suspended" ? "rejected" : "approved",
-      approved_by: actor?.id ?? null,
-      approved_at: now,
-      updated_at: now,
-    };
-    cache.profiles[idx] = updated;
-
-    try {
-      await supabase
-        .from("profiles")
-        .update({
-          role: updated.role,
-          verification_status: updated.verification_status,
-          approved_by: updated.approved_by,
-          approved_at: updated.approved_at,
-          updated_at: now,
-        })
-        .eq("id", profileId);
-    } catch {
-      // local cache updated
-    }
-
+    await requireAccountAdmin(actor?.id);
+    const profile = await createAccountRecord(input, draftId);
+    const cache = loadLocalCache();
+    cache.profiles = [profile, ...cache.profiles.filter(p => p.id !== profile.id)];
     saveLocalCache(cache);
-    return updated;
+    return profile;
   },
 
-  async adminResetUserPassword(params: {
-    userId: string;
-    newPassword: string;
-    notifyUser?: boolean;
-  }): Promise<{ profile: Profile; notification?: UserNotification }> {
-    const supabase = createClient();
+  async approveAccountRole(profileId: string, role: UserRole): Promise<Profile> {
+    if (role === "pending_verification") throw new Error("กรุณาเลือกบทบาทสำหรับเปิดใช้งาน");
+    const current = await this.getCurrentProfile();
+    const actor = await requireAccountAdmin(current?.id);
+    const profile = await changeAccountRole(profileId, role, actor);
     const cache = loadLocalCache();
-    const admin = await this.getCurrentProfile();
-    const now = new Date().toISOString();
-
-    const idx = cache.profiles.findIndex((p) => p.id === params.userId);
-    if (idx === -1) throw new Error("ไม่พบบัญชีผู้ใช้งานที่ต้องการแก้ไข");
-
-    const targetUser = cache.profiles[idx];
-    const updatedProfile: Profile = {
-      ...targetUser,
-      password_hash: params.newPassword,
-      updated_at: now,
-    };
-    cache.profiles[idx] = updatedProfile;
-
-    // 1. Update in Supabase profiles table
-    try {
-      await supabase
-        .from("profiles")
-        .update({
-          password_hash: params.newPassword,
-          updated_at: now,
-        })
-        .eq("id", params.userId);
-    } catch {
-      // local cache updated
-    }
-
-    // 2. Notification to UserID if notifyUser is true
-    let notif: UserNotification | undefined;
-    if (params.notifyUser !== false) {
-      notif = {
-        id: crypto.randomUUID(),
-        user_id: params.userId,
-        title: "แจ้งเตือนความปลอดภัย: รหัสผ่านของคุณถูกแก้ไขโดยผู้ดูแลระบบ",
-        message: `ผู้ดูแลระบบ (Super Admin) ได้ทำการแก้ไขรหัสผ่านสำหรับบัญชี ${targetUser.employee_code ?? targetUser.full_name} เมื่อ ${new Date().toLocaleString("th-TH")} หากท่านไม่ได้เป็นผู้ร้องขอ กรุณาติดต่อศูนย์สั่งการทันที`,
-        type: "security_alert",
-        is_read: false,
-        created_at: now,
-      };
-
-      if (!cache.userNotifications) cache.userNotifications = [];
-      cache.userNotifications.unshift(notif);
-
-      try {
-        await supabase.from("user_notifications").insert(notif);
-      } catch {
-        // fallback
-      }
-
-      // Add to general notifications_log
-      const logEntry: NotificationLog = {
-        id: crypto.randomUUID(),
-        report_id: null,
-        channel: "push",
-        recipient: targetUser.email ?? targetUser.employee_code ?? params.userId,
-        message: notif.message,
-        status: "sent",
-        error_message: null,
-        sent_at: now,
-      };
-      cache.notifications.unshift(logEntry);
-      try {
-        await supabase.from("notifications_log").insert(logEntry);
-      } catch {
-        // fallback
-      }
-
-      // Dispatch Telegram if user has telegram_chat_id
-      if (targetUser.telegram_chat_id) {
-        try {
-          await this.dispatchTelegramNotification({
-            reportCode: targetUser.employee_code ?? "SECURITY",
-            riskLevel: "yellow",
-            locationText: "ศูนย์ปฏิบัติการความปลอดภัยบัญชี",
-            predictedLabel: "security_alert",
-            confidence: 1.0,
-            note: `[แจ้งเตือนเจ้าหน้าที่ ${targetUser.full_name}] ผู้ดูแลระบบได้ปรับปรุงรหัสผ่านบัญชีของคุณเรียบร้อยแล้ว`,
-          });
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    // 3. Audit log
-    cache.auditLogs.unshift({
-      id: crypto.randomUUID(),
-      actor_id: admin?.id ?? null,
-      actor_name: admin?.full_name ?? "ผู้ดูแลระบบ (Super Admin)",
-      action: "admin_reset_user_password",
-      target_table: "profiles",
-      target_id: params.userId,
-      details: {
-        target_employee_code: targetUser.employee_code,
-        target_name: targetUser.full_name,
-        notified: params.notifyUser !== false,
-      },
-      created_at: now,
-    });
-
+    cache.profiles = cache.profiles.map(p => p.id === profile.id ? profile : p);
     saveLocalCache(cache);
-    return { profile: updatedProfile, notification: notif };
+    return profile;
+  },
+
+  async adminResetUserPassword(input: { userId: string; newPassword: string; notifyUser?: boolean }) {
+    const current = await this.getCurrentProfile();
+    const actor = await requireAccountAdmin(current?.id);
+    const result = await resetAccountPassword(input);
+    const cache = loadLocalCache();
+    cache.profiles = cache.profiles.map(p => p.id === result.profile.id ? result.profile : p);
+    if (result.notification) cache.userNotifications.unshift(result.notification);
+    cache.auditLogs.unshift({ id: crypto.randomUUID(), actor_id: actor.id, actor_name: actor.full_name,
+      action: "admin_reset_user_password", target_table: "profiles", target_id: result.profile.id,
+      details: { notified: result.notificationStatus === "sent" }, created_at: new Date().toISOString() });
+    saveLocalCache(cache);
+    return result;
   },
 
   async getUserNotifications(userId: string): Promise<UserNotification[]> {

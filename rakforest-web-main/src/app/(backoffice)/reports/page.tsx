@@ -119,7 +119,7 @@ export default function BackofficeReportsListPage() {
       const { report } = await rakforestRepo.createReportWithAudio({
         sourceType: "station_sensor",
         stationId: selectedStationId,
-        zoneId: station?.zone_id ?? zones[0]?.id,
+        zoneId: station?.zone_id ?? null,
         lat: station?.lat ?? 18.1234,
         lng: station?.lng ?? 98.7654,
         description:

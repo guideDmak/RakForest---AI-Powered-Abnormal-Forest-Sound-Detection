@@ -31,6 +31,8 @@ export type FieldOutcome = "found" | "not_found" | "unable_to_inspect";
 export type StationStatus = "online" | "offline" | "maintenance";
 
 export interface Profile {
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   id: string;
   employee_code: string | null;
   email: string | null;
@@ -39,6 +41,7 @@ export interface Profile {
   department: string | null;
   phone: string | null;
   role: UserRole;
+  requested_role?: "field_ranger" | "officer_backoffice" | "super_admin" | null;
   assigned_zone_ids: string[];
   id_card_file_url: string | null;
   verification_status: VerificationStatus;
@@ -63,6 +66,8 @@ export interface UserNotification {
 }
 
 export interface ForestZone {
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   id: string;
   zone_code: string | null;
   name: string;
@@ -78,6 +83,8 @@ export interface ForestZone {
 }
 
 export interface SensorStation {
+  deleted_at?: string | null;
+  deleted_by?: string | null;
   id: string;
   station_code: string; // e.g., ST-01
   name: string;

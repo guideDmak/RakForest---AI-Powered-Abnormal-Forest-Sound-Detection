@@ -23,6 +23,10 @@ interface Props {
   onSelectStation?: (stationId: string) => void;
   onSelectReport?: (reportId: string) => void;
   onMapClickCoordinates?: (coords: [number, number]) => void; // [lng, lat]
+  editMode?: "view" | "polygon" | "station";
+  onMovePolygonPoint?: (index: number, point: [number, number]) => void;
+  onSelectPolygonPoint?: (index: number) => void;
+  selectedPolygonPoint?: number | null;
   draftPolygonCoords?: [number, number][]; // For drawing a new forest zone
   draftPointCoords?: [number, number] | null; // For placing a station or field GPS pin
   draftRadiusMeters?: number;
@@ -53,6 +57,10 @@ export default function RiskZoneMap({
   onSelectStation,
   onSelectReport,
   onMapClickCoordinates,
+  editMode,
+  onMovePolygonPoint,
+  onSelectPolygonPoint,
+  selectedPolygonPoint,
   draftPolygonCoords,
   draftPointCoords,
   draftRadiusMeters = 350,
@@ -62,6 +70,7 @@ export default function RiskZoneMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const polygonMarkersRef = useRef<maplibregl.Marker[]>([]);
 
   const [ready, setReady] = useState(false);
   const [basemap, setBasemap] = useState<BasemapStyle>("street");
@@ -76,12 +85,18 @@ export default function RiskZoneMap({
     onSelectStation,
     onSelectReport,
     onMapClickCoordinates,
+    editMode,
+    onMovePolygonPoint,
+    onSelectPolygonPoint,
   });
   callbacksRef.current = {
     onSelectZone,
     onSelectStation,
     onSelectReport,
     onMapClickCoordinates,
+    editMode,
+    onMovePolygonPoint,
+    onSelectPolygonPoint,
   };
 
   function flyToZone(zone: ForestZone) {
@@ -175,10 +190,11 @@ export default function RiskZoneMap({
       mapRef.current = map;
       map.addControl(
         new maplibregl.NavigationControl({ showCompass: false }),
-        "bottom-right"
+        "bottom-right",
       );
 
       map.on("click", (e) => {
+        if (callbacksRef.current.editMode === "view") return;
         callbacksRef.current.onMapClickCoordinates?.([
           Number(e.lngLat.lng.toFixed(6)),
           Number(e.lngLat.lat.toFixed(6)),
@@ -258,6 +274,11 @@ export default function RiskZoneMap({
         });
 
         map.on("click", "forest-zones-fill", (e) => {
+          if (
+            callbacksRef.current.editMode &&
+            callbacksRef.current.editMode !== "view"
+          )
+            return;
           const zoneId = e.features?.[0]?.properties?.id;
           if (zoneId && callbacksRef.current.onSelectZone) {
             callbacksRef.current.onSelectZone(zoneId);
@@ -372,7 +393,7 @@ export default function RiskZoneMap({
         map.setLayoutProperty(
           layerId,
           "visibility",
-          basemap === key ? "visible" : "none"
+          basemap === key ? "visible" : "none",
         );
       }
     });
@@ -385,8 +406,7 @@ export default function RiskZoneMap({
 
     // 1. Update Forest Zones GeoJSON
     const zonesSource = map.getSource("forest-zones") as
-      | maplibregl.GeoJSONSource
-      | undefined;
+      maplibregl.GeoJSONSource | undefined;
     if (zonesSource) {
       zonesSource.setData({
         type: "FeatureCollection",
@@ -421,8 +441,7 @@ export default function RiskZoneMap({
 
     // 2. Update Station Listening Radii GeoJSON
     const radiiSource = map.getSource("station-radii") as
-      | maplibregl.GeoJSONSource
-      | undefined;
+      maplibregl.GeoJSONSource | undefined;
     if (radiiSource) {
       const features =
         showStations && showRadii
@@ -430,11 +449,11 @@ export default function RiskZoneMap({
               const activeReports = reports.filter(
                 (r) =>
                   r.station_id === st.id &&
-                  !["closed", "rejected"].includes(r.status)
+                  !["closed", "rejected"].includes(r.status),
               );
               const hasRed = activeReports.some((r) => r.risk_level === "red");
               const hasYellow = activeReports.some(
-                (r) => r.risk_level === "yellow"
+                (r) => r.risk_level === "yellow",
               );
               return {
                 type: "Feature" as const,
@@ -445,7 +464,11 @@ export default function RiskZoneMap({
                 geometry: {
                   type: "Polygon" as const,
                   coordinates: [
-                    createCirclePolygon(st.lng, st.lat, st.radius_meters || 350),
+                    createCirclePolygon(
+                      st.lng,
+                      st.lat,
+                      st.radius_meters || 350,
+                    ),
                   ],
                 },
               };
@@ -462,7 +485,7 @@ export default function RiskZoneMap({
               createCirclePolygon(
                 draftPointCoords[0],
                 draftPointCoords[1],
-                draftRadiusMeters
+                draftRadiusMeters,
               ),
             ],
           },
@@ -477,8 +500,7 @@ export default function RiskZoneMap({
 
     // 3. Update Draft Polygon Source
     const draftSource = map.getSource("draft-geometry") as
-      | maplibregl.GeoJSONSource
-      | undefined;
+      maplibregl.GeoJSONSource | undefined;
     if (draftSource) {
       if (draftPolygonCoords && draftPolygonCoords.length >= 2) {
         const ring = [...draftPolygonCoords, draftPolygonCoords[0]];
@@ -527,10 +549,21 @@ export default function RiskZoneMap({
         badge.className = `px-2 py-0.5 rounded-full border text-[11px] font-bold shadow-md cursor-pointer transition hover:scale-105 ${colorStyle} ${
           isSelected ? "ring-2 ring-amber-300" : ""
         }`;
-        badge.textContent = `🌲 ${z.zone_code}`;
+        badge.textContent = `🌲 ${z.name}`;
+        badge.style.maxWidth = "180px";
+        badge.style.overflow = "hidden";
+        badge.style.textOverflow = "ellipsis";
+        badge.style.whiteSpace = "nowrap";
+        badge.dataset.zoneLabel = z.id;
+        badge.setAttribute("aria-label", z.name);
         badge.title = `${z.zone_code} · ${z.name} (คลิกเพื่อซูมดูขอบเขตโซนป่า)`;
         badge.onclick = (e) => {
           e.stopPropagation();
+          if (
+            callbacksRef.current.editMode &&
+            callbacksRef.current.editMode !== "view"
+          )
+            return;
           callbacksRef.current.onSelectZone?.(z.id);
           flyToZone(z);
         };
@@ -546,7 +579,8 @@ export default function RiskZoneMap({
       for (const st of stations) {
         const activeReports = reports.filter(
           (r) =>
-            r.station_id === st.id && !["closed", "rejected"].includes(r.status)
+            r.station_id === st.id &&
+            !["closed", "rejected"].includes(r.status),
         );
         const hasRed = activeReports.some((r) => r.risk_level === "red");
         const hasYellow = activeReports.some((r) => r.risk_level === "yellow");
@@ -568,10 +602,15 @@ export default function RiskZoneMap({
         ]
           .filter(Boolean)
           .join(" ");
-        btn.innerHTML = `<span>📡 ${st.station_code}</span>`;
+        btn.textContent = `📡 ${st.station_code}`;
         btn.title = `${st.station_code} · ${st.name} (รัศมี ${st.radius_meters} ม.)`;
         btn.onclick = (e) => {
           e.stopPropagation();
+          if (
+            callbacksRef.current.editMode &&
+            callbacksRef.current.editMode !== "view"
+          )
+            return;
           callbacksRef.current.onSelectStation?.(st.id);
         };
 
@@ -622,6 +661,41 @@ export default function RiskZoneMap({
     }
 
     markersRef.current = nextMarkers;
+    const avoidLabelOverlap = () => {
+      const occupied: DOMRect[] = [];
+      const labels = nextMarkers
+        .filter((m) => m.getElement().dataset.zoneLabel)
+        .sort(
+          (a, b) =>
+            Number(b.getElement().dataset.zoneLabel === selectedZoneId) -
+            Number(a.getElement().dataset.zoneLabel === selectedZoneId),
+        );
+      for (const marker of labels) {
+        const element = marker.getElement();
+        element.style.visibility = "visible";
+        const rect = element.getBoundingClientRect();
+        if (
+          element.dataset.zoneLabel !== selectedZoneId &&
+          occupied.some(
+            (r) =>
+              rect.left < r.right + 8 &&
+              rect.right > r.left - 8 &&
+              rect.top < r.bottom + 8 &&
+              rect.bottom > r.top - 8,
+          )
+        )
+          element.style.visibility = "hidden";
+        else occupied.push(rect);
+      }
+    };
+    const frame = requestAnimationFrame(avoidLabelOverlap);
+    map.on("moveend", avoidLabelOverlap);
+    map.on("resize", avoidLabelOverlap);
+    return () => {
+      cancelAnimationFrame(frame);
+      map.off("moveend", avoidLabelOverlap);
+      map.off("resize", avoidLabelOverlap);
+    };
   }, [
     ready,
     zones,
@@ -638,6 +712,51 @@ export default function RiskZoneMap({
     draftPointCoords,
     draftRadiusMeters,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || editMode !== "polygon") return;
+    const markers = (draftPolygonCoords ?? []).map((point, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = String(index + 1);
+      button.className =
+        "h-9 w-9 rounded-full border-2 border-white shadow-md text-sm font-bold text-white";
+      button.setAttribute("aria-label", `จุดขอบเขต ${index + 1}`);
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        callbacksRef.current.onSelectPolygonPoint?.(index);
+      });
+      const marker = new maplibregl.Marker({ element: button, draggable: true })
+        .setLngLat(point)
+        .addTo(map);
+      marker.on("dragend", () => {
+        const p = marker.getLngLat();
+        callbacksRef.current.onMovePolygonPoint?.(index, [
+          Number(p.lng.toFixed(6)),
+          Number(p.lat.toFixed(6)),
+        ]);
+      });
+      return marker;
+    });
+    polygonMarkersRef.current = markers;
+    return () => {
+      markers.forEach((m) => m.remove());
+      polygonMarkersRef.current = [];
+    };
+  }, [ready, editMode, draftPolygonCoords]);
+
+  useEffect(() => {
+    polygonMarkersRef.current.forEach((marker, index) => {
+      const button = marker.getElement();
+      button.setAttribute(
+        "aria-pressed",
+        String(selectedPolygonPoint === index),
+      );
+      button.classList.toggle("bg-amber-600", selectedPolygonPoint === index);
+      button.classList.toggle("bg-blue-700", selectedPolygonPoint !== index);
+    });
+  }, [ready, editMode, draftPolygonCoords, selectedPolygonPoint]);
 
   return (
     <div

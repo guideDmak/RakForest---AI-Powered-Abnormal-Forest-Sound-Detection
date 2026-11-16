@@ -1,506 +1,573 @@
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { DeleteConfirmation } from "@/components/accounts/delete-dialog";
 import {
-  CheckCircle2,
-  Eye,
-  EyeOff,
+  Settings,
   KeyRound,
-  ShieldAlert,
-  Sparkles,
-  UserCheck,
-  UserPlus,
-  UserX,
-  X,
+  Fingerprint,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
+  ChevronRight,
+  UserRound,
+  type LucideIcon,
 } from "lucide-react";
+import {
+  updateEmployeeCode,
+  requireAccountAdmin,
+} from "@/lib/accounts/service";
 import { rakforestRepo } from "@/lib/supabase/repository";
-import { ROLE_LABELS_TH } from "@/lib/utils/risk";
-import type { Profile, UserRole } from "@/types/database.types";
+import { accountRoles, type ActiveRole } from "@/lib/accounts/validation";
+import {
+  AccountDialog,
+  AccountReview,
+  primary,
+  secondary,
+  control,
+  panel,
+  messageOf,
+  statusOf,
+} from "@/components/accounts/account-ui";
+import type { Profile } from "@/types/database.types";
 
-export default function BackofficeAccountsPage() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [confirmSuspendProfile, setConfirmSuspendProfile] =
-    useState<Profile | null>(null);
-  const [feedback, setFeedback] = useState("");
+type Step = "settings" | "review" | "suspend" | "password" | "code" | "delete";
+const titles: Record<Step, string> = {
+  settings: "ตั้งค่าบัญชี",
+  review: "ตรวจข้อมูลเจ้าหน้าที่",
+  suspend: "ยืนยันการระงับสิทธิ์",
+  password: "เปลี่ยนรหัสผ่าน",
+  code: "แก้ไขรหัสเจ้าหน้าที่",
+  delete: "ลบเจ้าหน้าที่",
+};
 
-  // Super Admin Password Edit Modal state
-  const [editingPasswordProfile, setEditingPasswordProfile] =
-    useState<Profile | null>(null);
-  const [newPasswordInput, setNewPasswordInput] = useState("");
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [notifyUserCheck, setNotifyUserCheck] = useState(true);
-  const [modalError, setModalError] = useState("");
-  const [modalBusy, setModalBusy] = useState(false);
-
-  function generateSecurePassword(): string {
-    const charsLower = "abcdefghjkmnpqrstuvwxyz";
-    const charsUpper = "ABCDEFGHJKMNPQRSTUVWXYZ";
-    const charsNum = "23456789";
-    const charsSpecial = "@#$!%";
-
-    let pwd = "";
-    for (let i = 0; i < 3; i++)
-      pwd += charsUpper[Math.floor(Math.random() * charsUpper.length)];
-    for (let i = 0; i < 4; i++)
-      pwd += charsLower[Math.floor(Math.random() * charsLower.length)];
-    for (let i = 0; i < 3; i++)
-      pwd += charsNum[Math.floor(Math.random() * charsNum.length)];
-    for (let i = 0; i < 2; i++)
-      pwd += charsSpecial[Math.floor(Math.random() * charsSpecial.length)];
-
-    return pwd
-      .split("")
-      .sort(() => 0.5 - Math.random())
-      .join("");
-  }
-
-  async function handleSaveNewPassword() {
-    if (!editingPasswordProfile) return;
-    if (newPasswordInput.length < 8) {
-      setModalError("รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร");
-      return;
-    }
-    if (
-      !/[a-z]/.test(newPasswordInput) ||
-      !/[A-Z]/.test(newPasswordInput) ||
-      !/[0-9]/.test(newPasswordInput)
-    ) {
-      setModalError("รหัสผ่านต้องมีทั้งตัวพิมพ์เล็ก, ตัวพิมพ์ใหญ่ และตัวเลข");
-      return;
-    }
-
-    setModalBusy(true);
-    setModalError("");
-    try {
-      await rakforestRepo.adminResetUserPassword({
-        userId: editingPasswordProfile.id,
-        newPassword: newPasswordInput.trim(),
-        notifyUser: notifyUserCheck,
-      });
-      setFeedback(
-        `แก้ไขรหัสผ่านของ ${editingPasswordProfile.full_name} (${editingPasswordProfile.employee_code ?? "RF-NEW"}) และส่งการแจ้งเตือนความปลอดภัยไปยัง UserID เรียบร้อยแล้ว`
-      );
-      setEditingPasswordProfile(null);
-      setNewPasswordInput("");
-      await loadProfiles();
-    } catch (err) {
-      setModalError(
-        err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการแก้ไขรหัสผ่าน"
-      );
-    } finally {
-      setModalBusy(false);
-    }
-  }
-
-  const loadProfiles = useCallback(async () => {
-    const list = await rakforestRepo.getProfiles();
-    setProfiles(list);
-  }, []);
-
-  useEffect(() => {
-    loadProfiles();
-  }, [loadProfiles]);
-
-  async function handleRoleChange(profileId: string, role: UserRole) {
-    setBusyId(profileId);
-    setFeedback("");
-    try {
-      const updated = await rakforestRepo.approveAccountRole(profileId, role);
-      await loadProfiles();
-      setConfirmSuspendProfile(null);
-      setFeedback(
-        `อัปเดตสิทธิ์ของ ${updated.full_name} เป็น "${ROLE_LABELS_TH[role]}" เรียบร้อยแล้ว`
-      );
-    } finally {
-      setBusyId(null);
-    }
-  }
-
+function SettingRow({
+  icon: Icon,
+  label,
+  description,
+  danger,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  description: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={`flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 ${danger ? "text-red-800 hover:bg-red-50" : "text-[#1B4332] hover:bg-[#F0F5F1]"}`}
+    >
+      <span
+        className={`rounded-lg p-2 ${danger ? "bg-red-50" : "bg-[#EAF3ED]"}`}
+      >
+        <Icon size={18} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{label}</span>
+        <span className="block text-xs leading-relaxed text-[#526358]">
+          {description}
+        </span>
+      </span>
+      <ChevronRight size={16} aria-hidden="true" />
+    </button>
+  );
+}
+
+function roleLabel(profile: Profile) {
+  return profile.role in accountRoles
+    ? accountRoles[profile.role as ActiveRole]
+    : profile.requested_role
+      ? accountRoles[profile.requested_role]
+      : "ยังไม่ได้กำหนดบทบาท";
+}
+function StatusBadge({ profile }: { profile: Profile }) {
+  const tone =
+    profile.role === "pending_verification"
+      ? "bg-amber-50 text-amber-900"
+      : profile.role === "suspended"
+        ? "bg-red-50 text-red-900"
+        : "bg-emerald-50 text-emerald-900";
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone}`}>
+      {statusOf(profile)}
+    </span>
+  );
+}
+
+export default function AccountsPage() {
+  const [profiles, setProfiles] = useState<Profile[]>([]),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+  const [query, setQuery] = useState(""),
+    [filter, setFilter] = useState("ทั้งหมด"),
+    [feedback, setFeedback] = useState("");
+  const [selection, setSelection] = useState<{ id: string; kind: Step }>(),
+    [role, setRole] = useState<ActiveRole>("field_ranger");
+  const [busy, setBusy] = useState(false),
+    [actionError, setActionError] = useState("");
+  const lock = useRef(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const profile = profiles.find((item) => item.id === selection?.id);
+  const action =
+    profile && selection ? { profile, kind: selection.kind } : undefined;
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [password, setPassword] = useState(""),
+    [showPassword, setShowPassword] = useState(false),
+    [notify, setNotify] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setProfiles(await rakforestRepo.getProfiles({ strict: true }));
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    const params = new URLSearchParams(window.location.search);
+    setQuery(params.get("q") || "");
+    rakforestRepo
+      .getCurrentProfile()
+      .then((p) => setIsAdmin(p?.role === "super_admin"))
+      .catch(() => setIsAdmin(false));
+  }, [load]);
+  const open = useCallback((profile: Profile, kind: Step) => {
+    setSelection({ id: profile.id, kind });
+    setFeedback("");
+    setEmployeeCode(profile.employee_code || "");
+    setRole(
+      profile.requested_role ??
+        (profile.role in accountRoles
+          ? (profile.role as ActiveRole)
+          : "field_ranger"),
+    );
+    setActionError("");
+    setPassword("");
+    setShowPassword(false);
+    setNotify(true);
+  }, []);
+  useEffect(() => {
+    if (loading || error || !isAdmin) return;
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("review");
+    const match = profiles.find((p) => p.id === id);
+    if (match) {
+      open(match, "review");
+      params.delete("review");
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (params.size ? "?" + params.toString() : ""),
+      );
+    }
+  }, [loading, error, profiles, isAdmin, open]);
+  async function save() {
+    if (
+      !action ||
+      action.kind === "settings" ||
+      action.kind === "delete" ||
+      lock.current
+    )
+      return;
+    lock.current = true;
+    setBusy(true);
+    setActionError("");
+    try {
+      let updated: Profile;
+      let text: string;
+      if (action.kind === "code") {
+        const actor = await rakforestRepo.getCurrentProfile();
+        await requireAccountAdmin(actor?.id);
+        updated = await updateEmployeeCode(action.profile.id, employeeCode);
+        text = "แก้ไขรหัสเจ้าหน้าที่แล้ว";
+      } else if (action.kind === "password") {
+        const result = await rakforestRepo.adminResetUserPassword({
+          userId: action.profile.id,
+          newPassword: password,
+          notifyUser: notify,
+        });
+        updated = result.profile;
+        text =
+          result.notificationStatus === "failed"
+            ? "เปลี่ยนรหัสผ่านแล้ว แต่ส่งการแจ้งเตือนในระบบไม่สำเร็จ"
+            : result.notificationStatus === "sent"
+              ? "เปลี่ยนรหัสผ่านและส่งการแจ้งเตือนในระบบแล้ว"
+              : "เปลี่ยนรหัสผ่านแล้ว";
+      } else {
+        updated = await rakforestRepo.approveAccountRole(
+          action.profile.id,
+          action.kind === "suspend" ? "suspended" : role,
+        );
+        text = action.kind === "suspend" ? "ระงับสิทธิ์แล้ว" : "อนุมัติเปิดใช้งานแล้ว";
+      }
+      setProfiles((list) =>
+        list.map((p) => (p.id === updated.id ? updated : p)),
+      );
+      setFeedback(text + " • " + updated.full_name);
+      setPassword("");
+      setSelection({ id: updated.id, kind: "settings" });
+    } catch (err) {
+      setActionError(messageOf(err));
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+  const search = query.trim().toLocaleLowerCase();
+  const visible = profiles.filter(
+    (p) =>
+      (filter === "ทั้งหมด" || statusOf(p) === filter) &&
+      [p.full_name, p.employee_code, p.email].some((v) =>
+        v?.toLocaleLowerCase().includes(search),
+      ),
+  );
+  return (
+    <div className="space-y-5 text-[#14241B]">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#14241B]">
-            จัดการบัญชีเจ้าหน้าที่และการยืนยันตัวตนพนักงาน
-          </h1>
-          <p className="text-xs text-[#526358]">
-            ตรวจสอบสถานะการยืนยันบัตรประจำตัวเจ้าหน้าที่ รหัส OTP และอนุมัติสิทธิ์การเข้าใช้งานระบบตามบทบาท (RBAC)
+          <h1 className="text-2xl font-bold">จัดการเจ้าหน้าที่</h1>
+          <p className="mt-1 text-sm text-[#526358]">
+            ค้นหาบัญชี ตรวจข้อมูล และอนุมัติการเข้าใช้งาน
           </p>
         </div>
-
-        <Link
-          href="/accounts/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-[#1B4332] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-[#2D6A4F]"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span>+ ลงทะเบียนเจ้าหน้าที่ใหม่ (4 ขั้นตอน)</span>
-        </Link>
-      </div>
-
-      {feedback && (
-        <div
+        {isAdmin && (
+          <Link href="/accounts/new" className={primary}>
+            เพิ่มเจ้าหน้าที่
+          </Link>
+        )}
+      </header>
+      {feedback && !action && (
+        <p
           role="status"
-          className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900"
+          className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm"
         >
-          <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-          <span>{feedback}</span>
-        </div>
+          {feedback}
+        </p>
       )}
-
-      {/* Confirmation Banner before suspending an account */}
-      {confirmSuspendProfile && (
-        <div
-          role="alertdialog"
-          aria-labelledby="confirm-suspend-title"
-          className="rounded-lg border-2 border-red-300 bg-red-50 p-4 space-y-3"
-        >
-          <div className="flex items-start gap-2.5">
-            <ShieldAlert className="h-5 w-5 text-[#D62828] shrink-0 mt-0.5" />
-            <div>
-              <p
-                id="confirm-suspend-title"
-                className="text-sm font-bold text-red-950"
-              >
-                ยืนยันการระงับสิทธิ์ใช้งานของ “{confirmSuspendProfile.full_name}” (
-                {confirmSuspendProfile.employee_code}) ใช่หรือไม่?
-              </p>
-              <p className="text-xs text-red-900 mt-0.5">
-                เมื่อระงับสิทธิ์แล้ว เจ้าหน้าที่ท่านนี้จะไม่สามารถเข้าสู่ระบบหรือส่งรายงานได้จนกว่าจะกดคืนสิทธิ์ใช้งาน
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+      <section className={panel}>
+        <label className="block text-sm font-semibold">
+          ค้นหาเจ้าหน้าที่
+          <input
+            ref={searchRef}
+            type="search"
+            className={control + " mt-1"}
+            placeholder="ชื่อ รหัสเจ้าหน้าที่ หรืออีเมล"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <div className="flex flex-wrap gap-2" aria-label="กรองสถานะ">
+          {["ทั้งหมด", "รออนุมัติ", "ใช้งานอยู่", "ระงับสิทธิ์"].map((value) => (
             <button
+              key={value}
               type="button"
-              disabled={busyId === confirmSuspendProfile.id}
-              onClick={() =>
-                handleRoleChange(confirmSuspendProfile.id, "suspended")
-              }
-              className="min-h-11 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#D62828] px-4 py-2 text-xs sm:text-sm font-bold text-white hover:bg-red-800"
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+              className={filter === value ? primary : secondary}
             >
-              <UserX className="h-4 w-4" />
-              <span>ยืนยันการระงับสิทธิ์</span>
+              {value} (
+              {value === "ทั้งหมด"
+                ? profiles.length
+                : profiles.filter((p) => statusOf(p) === value).length}
+              )
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirmSuspendProfile(null)}
-              className="min-h-11 inline-flex items-center justify-center rounded-lg border border-red-300 bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-[#14241B] hover:bg-slate-100"
-            >
-              ยกเลิก (ย้อนกลับ)
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Responsive Accounts Table (Desktop) & Cards (Mobile) */}
-      <section className="rounded-lg border border-[#D4DCD5] bg-white overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-[#D4DCD5] bg-[#F4F7F4] text-[#435449]">
-                <th className="py-3 px-4 font-semibold">รหัสพนักงาน / ชื่อ-สกุล</th>
-                <th className="py-3 px-4 font-semibold">ตำแหน่ง / หน่วยงาน</th>
-                <th className="py-3 px-4 font-semibold">สถานะยืนยันตัวตน</th>
-                <th className="py-3 px-4 font-semibold">บทบาท (Role)</th>
-                <th className="py-3 px-4 font-semibold text-right">การอนุมัติ / จัดการสิทธิ์</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E5ECE6]">
-              {profiles.map((p) => (
-                <tr key={p.id} className="hover:bg-[#F8FAF8]">
-                  <td className="py-3.5 px-4">
-                    <span className="font-mono-code font-bold text-[#1B4332] block">
-                      {p.employee_code ?? "RF-NEW"}
-                    </span>
-                    <strong className="text-sm text-[#14241B] block">
-                      {p.full_name}
-                    </strong>
-                    <span className="text-[11px] text-[#526358]">
-                      {p.email} • {p.phone}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span className="font-semibold text-[#14241B] block">
-                      {p.position}
-                    </span>
-                    <span className="text-[#526358]">{p.department}</span>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold ${
-                        p.verification_status === "approved"
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                          : p.verification_status === "otp_verified"
-                            ? "border-blue-300 bg-blue-50 text-blue-800"
-                            : "border-amber-300 bg-amber-50 text-amber-800"
-                      }`}
-                    >
-                      {p.verification_status === "approved"
-                        ? "อนุมัติแล้ว"
-                        : p.verification_status === "otp_verified"
-                          ? "ยืนยัน OTP แล้ว (รออนุมัติ)"
-                          : p.verification_status === "otp_sent"
-                            ? `ส่ง OTP แล้ว (${p.otp_code ?? ""})`
-                            : "รอตรวจสอบ"}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 font-semibold text-[#14241B]">
-                    {ROLE_LABELS_TH[p.role]}
-                  </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <div className="inline-flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        disabled={busyId === p.id}
-                        onClick={() => {
-                          setEditingPasswordProfile(p);
-                          setNewPasswordInput("");
-                          setShowNewPassword(false);
-                          setNotifyUserCheck(true);
-                          setModalError("");
-                        }}
-                        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#B8C7BC] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#1B4332] hover:bg-[#EBF2ED] transition shadow-xs"
-                        title="แก้ไขรหัสผ่านและส่งแจ้งเตือน"
-                      >
-                        <KeyRound className="h-3.5 w-3.5" />
-                        <span>แก้ไขรหัสผ่าน</span>
-                      </button>
-
-                      {p.role === "pending_verification" && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={busyId === p.id}
-                            onClick={() =>
-                              handleRoleChange(p.id, "field_ranger")
-                            }
-                            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-[#1B4332] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2D6A4F]"
-                          >
-                            <UserCheck className="h-3.5 w-3.5" />
-                            <span>อนุมัติภาคสนาม</span>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busyId === p.id}
-                            onClick={() =>
-                              handleRoleChange(p.id, "officer_backoffice")
-                            }
-                            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#1B4332] bg-white px-3 py-1.5 text-xs font-semibold text-[#1B4332] hover:bg-[#EBF2ED]"
-                          >
-                            <span>อนุมัติส่วนกลาง</span>
-                          </button>
-                        </>
-                      )}
-                      {p.role !== "super_admin" && p.role !== "suspended" && (
-                        <button
-                          type="button"
-                          disabled={busyId === p.id}
-                          onClick={() => setConfirmSuspendProfile(p)}
-                          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-[#D62828] hover:bg-red-50"
-                        >
-                          <UserX className="h-3.5 w-3.5" />
-                          <span>ระงับสิทธิ์</span>
-                        </button>
-                      )}
-                      {p.role === "suspended" && (
-                        <button
-                          type="button"
-                          disabled={busyId === p.id}
-                          onClick={() => handleRoleChange(p.id, "field_ranger")}
-                          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"
-                        >
-                          <span>คืนสิทธิ์ใช้งาน</span>
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Cards (<768px) */}
-        <div className="divide-y divide-[#E5ECE6] md:hidden">
-          {profiles.map((p) => (
-            <div key={p.id} className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-mono-code text-xs font-bold text-[#1B4332]">
-                  {p.employee_code}
-                </span>
-                <span className="text-xs font-semibold text-[#526358]">
-                  {ROLE_LABELS_TH[p.role]}
-                </span>
-              </div>
-              <p className="text-sm font-bold text-[#14241B]">{p.full_name}</p>
-              <p className="text-xs text-[#526358]">
-                {p.position} • {p.department}
-              </p>
-
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-[#F0F4F1]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingPasswordProfile(p);
-                    setNewPasswordInput("");
-                    setShowNewPassword(false);
-                    setNotifyUserCheck(true);
-                    setModalError("");
-                  }}
-                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#B8C7BC] bg-white py-2 text-xs font-semibold text-[#1B4332] hover:bg-[#EBF2ED]"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  <span>แก้ไขรหัสผ่าน</span>
-                </button>
-              </div>
-
-              {p.role === "pending_verification" && (
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleRoleChange(p.id, "field_ranger")}
-                    className="flex-1 rounded bg-[#1B4332] py-2 text-xs font-semibold text-white"
-                  >
-                    อนุมัติเป็นเจ้าหน้าที่ภาคสนาม
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRoleChange(p.id, "officer_backoffice")}
-                    className="flex-1 rounded border border-[#1B4332] py-2 text-xs font-semibold text-[#1B4332]"
-                  >
-                    อนุมัติเป็นส่วนกลาง
-                  </button>
-                </div>
-              )}
-            </div>
           ))}
         </div>
       </section>
-
-      {/* Super Admin Reset Password Modal */}
-      {editingPasswordProfile && (
+      {error && (
         <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 p-4 space-y-3"
         >
-          <div className="w-full max-w-md rounded-xl border border-[#C6D1C8] bg-white p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E4ECE6] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="rounded-lg bg-emerald-100 p-2 text-[#1B4332]">
-                  <KeyRound className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-[#14241B]">
-                    แก้ไขรหัสผ่านเจ้าหน้าที่
-                  </h2>
-                  <p className="text-xs text-[#526358]">
-                    {editingPasswordProfile.full_name} ({editingPasswordProfile.employee_code ?? "RF-NEW"})
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingPasswordProfile(null)}
-                className="p-1.5 text-[#526358] hover:text-[#14241B] rounded-lg"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="rounded-lg border border-red-300 bg-red-50 p-2.5 text-xs font-semibold text-red-800">
-                {modalError}
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-[#14241B]">
-                    รหัสผ่านใหม่ (New Password) *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setNewPasswordInput(generateSecurePassword())}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#1B4332] hover:underline"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    <span>สุ่มรหัสผ่านอัตโนมัติ</span>
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type={showNewPassword ? "text" : "password"}
-                    required
-                    value={newPasswordInput}
-                    onChange={(e) => {
-                      setNewPasswordInput(e.target.value);
-                      if (modalError) setModalError("");
-                    }}
-                    placeholder="อย่างน้อย 8 ตัวอักษร (a-z, A-Z, 0-9)"
-                    className="w-full rounded-lg border border-[#B8C7BC] bg-white pl-3.5 pr-10 py-2.5 text-sm font-mono-code text-[#14241B] focus:border-[#1B4332] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-[#526358] hover:text-[#14241B]"
-                  >
-                    {showNewPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                <p className="text-[10px] text-[#526358] mt-1">
-                  เกณฑ์ความปลอดภัย: ต้องมีอย่างน้อย 8 ตัวอักษร, มีตัวพิมพ์เล็ก พิมพ์ใหญ่ และตัวเลข
+          <p>{error}</p>
+          <button
+            type="button"
+            className={secondary}
+            onClick={() => void load()}
+          >
+            ลองโหลดใหม่
+          </button>
+        </div>
+      )}
+      {loading ? (
+        <p role="status">กำลังโหลดเจ้าหน้าที่…</p>
+      ) : (
+        !error && (
+          <section
+            aria-label="รายการเจ้าหน้าที่"
+            className="rounded-xl border border-[#D4DCD5] bg-white"
+          >
+            {!visible.length ? (
+              <p className="p-6 text-center text-sm text-[#526358]">
+                {profiles.length ? "ไม่พบเจ้าหน้าที่ตามเงื่อนไข" : "ยังไม่มีบัญชีเจ้าหน้าที่"}
+              </p>
+            ) : (
+              <>
+                <p className="border-b border-[#D4DCD5] px-4 py-3 text-sm text-[#526358]">
+                  พบ {visible.length} บัญชี
                 </p>
+                <ul className="divide-y divide-[#D4DCD5]">
+                  {visible.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="font-semibold">{p.full_name}</h2>
+                          <StatusBadge profile={p} />
+                        </div>
+                        <p className="break-words text-sm text-[#526358]">
+                          {p.employee_code} · {roleLabel(p)}
+                        </p>
+                        <p className="break-words text-sm text-[#526358]">
+                          {p.department || p.email || "ไม่ได้ระบุหน่วยงาน"}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex flex-wrap gap-2">
+                          {(p.role === "pending_verification" ||
+                            p.role === "suspended") && (
+                            <button
+                              type="button"
+                              className={primary}
+                              onClick={() => open(p, "review")}
+                            >
+                              {p.role === "suspended"
+                                ? "คืนสิทธิ์"
+                                : "ตรวจสอบและอนุมัติ"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={secondary + " gap-2"}
+                            onClick={() => open(p, "settings")}
+                          >
+                            <Settings size={16} aria-hidden="true" />
+                            ตั้งค่าบัญชี
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        )
+      )}
+      {action && (
+        <AccountDialog
+          title={titles[action.kind]}
+          busy={busy}
+          fallbackFocus={searchRef}
+          onClose={() => {
+            setPassword("");
+            setSelection(undefined);
+          }}
+        >
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-[#D8E5DB] bg-[#F3F8F4] p-3.5">
+            <span className="rounded-lg bg-[#DDECE2] p-2.5 text-[#1B4332]">
+              <UserRound size={20} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="break-words font-semibold">
+                  {action.profile.full_name}
+                </p>
+                <StatusBadge profile={action.profile} />
               </div>
-
-              {/* Notify User Checkbox */}
-              <label className="flex items-start gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={notifyUserCheck}
-                  onChange={(e) => setNotifyUserCheck(e.target.checked)}
-                  className="mt-0.5 rounded border-[#1B4332] text-[#1B4332] focus:ring-[#1B4332]"
-                />
-                <div>
-                  <span className="font-bold text-emerald-950 block">
-                    แจ้งเตือนไปยังเจ้าหน้าที่ (UserID) ทันที
-                  </span>
-                  <span className="text-[11px] text-emerald-800 block">
-                    ระบบจะแสดง In-App Security Banner เมื่อเจ้าหน้าที่ล็อกอิน + ส่งแจ้งเตือนผ่าน Telegram Bot
-                  </span>
-                </div>
-              </label>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E4ECE6]">
-              <button
-                type="button"
-                disabled={modalBusy}
-                onClick={() => setEditingPasswordProfile(null)}
-                className="rounded-lg border border-[#C6D1C8] px-4 py-2.5 text-xs font-semibold text-[#526358] hover:bg-slate-50"
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                disabled={modalBusy || !newPasswordInput}
-                onClick={handleSaveNewPassword}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#1B4332] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#2D6A4F] disabled:opacity-50"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                <span>{modalBusy ? "กำลังบันทึก..." : "บันทึกรหัสผ่านใหม่และแจ้งเตือน"}</span>
-              </button>
+              <p className="mt-1 break-words text-sm text-[#526358]">
+                {action.profile.employee_code} · {roleLabel(action.profile)}
+              </p>
             </div>
           </div>
-        </div>
+          {action.kind === "settings" ? (
+            <div className="space-y-4">
+              {feedback && (
+                <p
+                  role="status"
+                  className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
+                >
+                  {feedback}
+                </p>
+              )}
+              <section>
+                <h3 className="mb-2 text-sm font-semibold">ข้อมูลบัญชีและรหัสผ่าน</h3>
+                <div className="divide-y divide-[#D4DCD5] overflow-hidden rounded-xl border border-[#D4DCD5]">
+                  <SettingRow
+                    icon={KeyRound}
+                    label="เปลี่ยนรหัสผ่าน"
+                    description="กำหนดรหัสผ่านใหม่สำหรับเข้าสู่ระบบ"
+                    onClick={() => open(action.profile, "password")}
+                  />
+                  <SettingRow
+                    icon={Fingerprint}
+                    label="แก้ไขรหัสเจ้าหน้าที่"
+                    description="แก้รหัสที่ใช้ค้นหาและอ้างอิงเจ้าหน้าที่"
+                    onClick={() => open(action.profile, "code")}
+                  />
+                </div>
+              </section>
+              <section>
+                <h3 className="mb-2 text-sm font-semibold">สิทธิ์และการลบบัญชี</h3>
+                <div className="divide-y divide-[#D4DCD5] overflow-hidden rounded-xl border border-[#D4DCD5]">
+                  {(action.profile.role === "pending_verification" ||
+                    action.profile.role === "suspended") && (
+                    <SettingRow
+                      icon={ShieldCheck}
+                      label={
+                        action.profile.role === "suspended"
+                          ? "คืนสิทธิ์"
+                          : "ตรวจสอบและอนุมัติ"
+                      }
+                      description="ตรวจข้อมูลและเลือกบทบาทก่อนเปิดใช้งาน"
+                      onClick={() => open(action.profile, "review")}
+                    />
+                  )}
+                  {action.profile.role !== "super_admin" &&
+                    action.profile.role !== "suspended" && (
+                      <SettingRow
+                        icon={ShieldOff}
+                        label="ระงับสิทธิ์"
+                        description="ปิดการเข้าใช้งานชั่วคราว"
+                        onClick={() => open(action.profile, "suspend")}
+                      />
+                    )}
+                  <SettingRow
+                    icon={Trash2}
+                    label="ลบเจ้าหน้าที่"
+                    description="นำบัญชีออกจากการใช้งานและเก็บประวัติรายงาน"
+                    danger
+                    onClick={() => open(action.profile, "delete")}
+                  />
+                </div>
+              </section>
+            </div>
+          ) : action.kind === "delete" ? (
+            <DeleteConfirmation
+              kind="profile"
+              id={action.profile.id}
+              name={`${action.profile.full_name} (${action.profile.employee_code})`}
+              cancelLabel="ย้อนกลับ"
+              onBusyChange={setBusy}
+              onClose={() => open(action.profile, "settings")}
+              onDeleted={() => {
+                setProfiles((list) =>
+                  list.filter((p) => p.id !== action.profile.id),
+                );
+                setSelection(undefined);
+                setFeedback("ลบเจ้าหน้าที่ออกจากรายการใช้งานแล้ว ประวัติเดิมยังคงอยู่");
+              }}
+              render={(form) => form}
+            />
+          ) : (
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void save();
+              }}
+              aria-busy={busy}
+            >
+              {action.kind === "code" ? (
+                <label className="block text-sm font-semibold">
+                  รหัสเจ้าหน้าที่
+                  <input
+                    className={control}
+                    value={employeeCode}
+                    onChange={(e) => setEmployeeCode(e.target.value)}
+                    required
+                    disabled={busy}
+                  />
+                </label>
+              ) : action.kind === "review" ? (
+                <AccountReview
+                  profile={action.profile}
+                  role={role}
+                  onRole={setRole}
+                  busy={busy}
+                />
+              ) : action.kind === "suspend" ? (
+                <p>
+                  ระงับสิทธิ์ของ <strong>{action.profile.full_name}</strong> (
+                  {action.profile.employee_code})? บัญชีจะเข้าใช้งานไม่ได้จนกว่าจะคืนสิทธิ์
+                </p>
+              ) : (
+                <>
+                  <label className="block text-sm font-semibold">
+                    รหัสผ่านใหม่
+                    <input
+                      autoComplete="new-password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      className={control + " mt-1"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <p className="text-sm text-[#526358]">
+                    อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก ตัวพิมพ์ใหญ่ และตัวเลข
+                  </p>
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={showPassword}
+                      onChange={(e) => setShowPassword(e.target.checked)}
+                    />
+                    แสดงรหัสผ่าน
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={notify}
+                      onChange={(e) => setNotify(e.target.checked)}
+                    />
+                    แจ้งเจ้าหน้าที่ผ่านการแจ้งเตือนในระบบ
+                  </label>
+                </>
+              )}
+              {actionError && (
+                <p
+                  role="alert"
+                  className="rounded-lg bg-red-50 p-3 text-sm text-red-800"
+                >
+                  {actionError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  className={secondary}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => open(action.profile, "settings")}
+                >
+                  ย้อนกลับ
+                </button>
+                <button className={primary} disabled={busy}>
+                  {busy
+                    ? "กำลังบันทึก…"
+                    : action.kind === "code"
+                      ? "บันทึกรหัสเจ้าหน้าที่"
+                      : action.kind === "password"
+                        ? "บันทึกรหัสผ่าน"
+                        : action.kind === "suspend"
+                          ? "ยืนยันระงับสิทธิ์"
+                          : "อนุมัติเปิดใช้งาน"}
+                </button>
+              </div>
+            </form>
+          )}
+        </AccountDialog>
       )}
     </div>
   );
