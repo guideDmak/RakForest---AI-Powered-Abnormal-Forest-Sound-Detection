@@ -5,9 +5,23 @@ import {
 } from "@/lib/accounts/delete-server";
 export const runtime = "nodejs";
 const attempts = new Map<string, { count: number; until: number }>();
+
+function hasSameOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("host");
+  if (!origin || !host) return false;
+
+  try {
+    const protocol = new URL(request.url).protocol;
+    return new URL(origin).origin === new URL(`${protocol}//${host}`).origin;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   try {
-    if (request.headers.get("origin") !== new URL(request.url).origin)
+    if (!hasSameOrigin(request))
       return Response.json({ message: "คำขอไม่ถูกต้อง" }, { status: 403 });
     const text = await request.text();
     if (text.length > 4096)
