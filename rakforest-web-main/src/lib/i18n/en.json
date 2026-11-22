@@ -731,5 +731,20 @@
   "บันทึกการตั้งค่าช่องทางแจ้งเตือนระดับ \"{risk}\" แล้ว": "Alert settings saved for {risk}.",
   "บันทึกประวัติแล้ว ({result})": "Recorded ({result})",
   "บันทึกผลยืนยันเหตุจริงแล้ว": "Incident confirmation saved.",
-  "บันทึกผลปฏิเสธรายงานแล้ว": "Report dismissal saved."
+  "บันทึกผลปฏิเสธรายงานแล้ว": "Report dismissal saved.",
+  "ส่งแจ้งเตือนด่วนทันทีเมื่อโมเดลจริงวิเคราะห์เสร็จและบันทึกผลแล้ว": "Send an urgent alert as soon as the model result is saved.",
+  "ส่งแจ้งเตือนเฝ้าระวังทันทีเมื่อบันทึกผลโมเดลจริง พร้อมขอให้ตรวจสอบสัญญาณซ้ำ": "Send a watch alert as soon as the model result is saved and ask staff to recheck the signal.",
+  "เก็บผลไว้ในประวัติรายงาน": "Keep results in the report history.",
+  "ส่ง Telegram อัตโนมัติ": "Send Telegram alerts automatically",
+  "บันทึกการตั้งค่าแจ้งเตือนไม่สำเร็จ": "Could not save alert settings.",
+  "รอยืนยันผลการส่ง": "Delivery unconfirmed",
+  "ผลจำลองสำหรับเดโม": "Simulated demo result",
+  "ช่องทางแจ้งเตือน": "Notification channels",
+  "เก็บในประวัติเท่านั้น": "Report history only",
+  "ยังไม่เชื่อมต่อ": "Not connected",
+  "รัศมีแจ้งเตือนเจ้าหน้าที่ภาคสนาม (เมตร)": "Field alert radius (metres)",
+  "ส่งถึงเจ้าหน้าที่ประจำโซนเกิดเหตุและโซนใกล้จุดเกิดเหตุ วัดถึงขอบเขตโซน ค่าเริ่มต้น 1,000 ม. ตั้ง 0 เพื่อใช้เฉพาะโซนเกิดเหตุ": "Notify rangers assigned to the incident zone and nearby zones by distance to their boundaries. Default: 1,000 m. Set 0 to use the incident zone only.",
+  "บันทึกรัศมี": "Save radius",
+  "คืนค่าเริ่มต้น": "Restore default",
+  "ยังไม่ได้กำหนดโซนรับผิดชอบ": "No assigned zones"
 }

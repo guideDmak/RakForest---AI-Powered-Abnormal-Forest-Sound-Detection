@@ -192,6 +192,7 @@ export interface NotificationRule {
   action_description: string | null;
   channels: string[];
   auto_dispatch: boolean;
+  field_radius_meters?: number;
   updated_by: string | null;
   updated_at: string;
 }

@@ -347,9 +347,10 @@ export const rakforestRepo = {
 
     // Call /api/classify-audio with the selected checkpoint (or explicit mock fallback)
     let aiRaw: AIRawResponse | null = null;
-    let predictedLabel = "chainsaw";
-    let confidence = 0.88;
-    let riskLevel: RiskLevel = "red";
+    let predictedLabel = "";
+    let confidence = 0;
+    let riskLevel: RiskLevel = "green";
+    let processedAt: string | undefined;
 
     if (params.audioFile) {
       const formData = new FormData();
@@ -357,16 +358,18 @@ export const rakforestRepo = {
       formData.set("requestId", reportCode);
       formData.set("stationId", station?.station_code ?? "FIELD-GPS");
       formData.set("modelId", params.modelId ?? "cnn_sigmoid");
-      const res = await fetch("/api/classify-audio", {
-        method: "POST",
-        body: formData,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        aiRaw = data.rawResponse as AIRawResponse;
-        predictedLabel = data.predictedLabel;
-        confidence = data.confidence;
-        riskLevel = data.riskLevel;
+      try {
+        const res = await fetch("/api/classify-audio", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          aiRaw = data.rawResponse as AIRawResponse;
+          predictedLabel = data.predictedLabel;
+          confidence = data.confidence;
+          riskLevel = data.riskLevel;
+          processedAt = data.processedAt;
+        }
+      } catch {
+        // A report can be saved for manual review when analysis is unavailable.
       }
     }
 
@@ -401,7 +404,16 @@ export const rakforestRepo = {
     }
 
     const audioId = crypto.randomUUID();
-    const classificationId = crypto.randomUUID();
+    const classification = aiRaw && processedAt ? {
+      id: crypto.randomUUID(),
+      report_audio_id: audioId,
+      predicted_label: predictedLabel,
+      confidence,
+      raw_response: aiRaw,
+      model_version: aiRaw.modelVersion ?? null,
+      processed_at: processedAt,
+    } : null;
+    let analysisSaved = false;
 
     const newReport: ReportRecord = {
       id: reportId,
@@ -441,18 +453,7 @@ export const rakforestRepo = {
               duration_seconds:
                 aiRaw?.segments?.at(-1)?.endSeconds ?? 8,
               uploaded_at: now.toISOString(),
-              ai_classifications: [
-                {
-                  id: classificationId,
-                  report_audio_id: audioId,
-                  predicted_label: predictedLabel,
-                  confidence,
-                  raw_response: aiRaw,
-                  model_version:
-                    aiRaw?.modelVersion ?? "rakforest-audiocnn-multilabel-v1",
-                  processed_at: now.toISOString(),
-                },
-              ],
+              ai_classifications: classification ? [classification] : [],
             },
           ]
         : [],
@@ -473,11 +474,12 @@ export const rakforestRepo = {
         description: newReport.description,
         status: newReport.status,
         risk_level: newReport.risk_level,
+        created_at: newReport.created_at,
       });
 
       if(reportError)throw new Error("บันทึกรายงานไม่สำเร็จ ไมค์หรือเจ้าหน้าที่อาจถูกลบ กรุณาโหลดข้อมูลใหม่");
       if (params.audioFile) {
-        await supabase.from("report_audio").insert({
+        const { error: audioError } = await supabase.from("report_audio").insert({
           id: audioId,
           report_id: reportId,
           file_url: audioFileUrl,
@@ -485,15 +487,10 @@ export const rakforestRepo = {
           duration_seconds: aiRaw?.segments?.at(-1)?.endSeconds ?? 8,
         });
 
-        await supabase.from("ai_classifications").insert({
-          id: classificationId,
-          report_audio_id: audioId,
-          predicted_label: predictedLabel,
-          confidence,
-          raw_response: aiRaw ?? {},
-          model_version:
-            aiRaw?.modelVersion ?? "rakforest-audiocnn-multilabel-v1",
-        });
+        if (classification && !audioError) {
+          const { error } = await supabase.from("ai_classifications").insert(classification);
+          analysisSaved = !error;
+        }
       }
 
       if (evidenceItems.length > 0) {
@@ -515,19 +512,15 @@ export const rakforestRepo = {
     cache.reports.unshift(newReport);
     saveLocalCache(cache);
 
-    // Trigger Telegram alert automatically if risk is red or yellow
-    if (riskLevel === "red" || riskLevel === "yellow") {
-      const stationLabel = station
-        ? `${station.station_code} (${station.name})`
-        : `พิกัด ${params.lat.toFixed(4)}, ${params.lng.toFixed(4)}`;
+    if (analysisSaved && aiRaw?.source === "http" && (riskLevel === "red" || riskLevel === "yellow")) {
       await this.dispatchTelegramNotification({
+        mode: "automatic",
         reportId: newReport.id,
         reportCode: newReport.report_code,
         riskLevel,
         predictedLabel,
         confidence,
-        locationText: stationLabel,
-        note: newReport.description ?? "",
+        locationText: "",
       });
     }
 
@@ -927,19 +920,19 @@ export const rakforestRepo = {
   ): Promise<NotificationRule[]> {
     const supabase = createClient();
     const cache = loadLocalCache();
-    cache.rules = cache.rules.map((r) =>
-      r.risk_level === rule.risk_level
-        ? { ...r, ...rule, updated_at: new Date().toISOString() }
-        : r
+    const { data, error } = await supabase.from("notification_rules")
+      .update({
+        channels: rule.channels,
+        field_radius_meters: rule.field_radius_meters,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("risk_level", rule.risk_level)
+      .select("*")
+      .single();
+    if (error || !data) throw new Error("บันทึกการตั้งค่าแจ้งเตือนไม่สำเร็จ");
+    cache.rules = cache.rules.map((existing) =>
+      existing.risk_level === rule.risk_level ? data as NotificationRule : existing
     );
-    try {
-      const target = cache.rules.find((r) => r.risk_level === rule.risk_level);
-      if (target) {
-        await supabase.from("notification_rules").upsert(target);
-      }
-    } catch {
-      // local cache updated
-    }
     saveLocalCache(cache);
     return cache.rules;
   },
@@ -965,6 +958,7 @@ export const rakforestRepo = {
   },
 
   async dispatchTelegramNotification(params: {
+    mode?: "automatic";
     reportId?: string | null;
     reportCode: string;
     riskLevel: RiskLevel;
@@ -972,26 +966,32 @@ export const rakforestRepo = {
     confidence: number;
     locationText: string;
     note?: string;
-  }): Promise<NotificationLog> {
-    const cache = loadLocalCache();
-    const res = await fetch("/api/notifications/dispatch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
+  }): Promise<NotificationLog | null> {
+    let payload: { log?: NotificationLog; message?: string; error?: string; skipped?: boolean };
+    try {
+      const res = await fetch("/api/notifications/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      payload = await res.json();
+    } catch {
+      payload = { error: "ไม่สามารถเชื่อมต่อบริการแจ้งเตือนได้" };
+    }
+    if (payload.skipped) return null;
 
-    const payload = await res.json();
     const logItem: NotificationLog = payload.log ?? {
       id: crypto.randomUUID(),
       report_id: params.reportId ?? null,
       channel: "telegram",
       recipient: "Telegram Operations Channel",
       message: payload.message ?? `แจ้งเตือน ${params.reportCode}`,
-      status: res.ok ? "sent" : "failed",
+      status: "failed",
       error_message: payload.error ?? null,
       sent_at: new Date().toISOString(),
     };
 
+    const cache = loadLocalCache();
     cache.notifications.unshift(logItem);
     saveLocalCache(cache);
     return logItem;

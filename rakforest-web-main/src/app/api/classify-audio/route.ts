@@ -1,3 +1,4 @@
+import { parseModelResult } from "@/lib/ml-contract";
 import { NextResponse } from "next/server";
 import {
   calculateThreatPriorityRisk,
@@ -145,7 +146,8 @@ export async function POST(request: Request) {
     try {
       const upstreamForm = new FormData();
       upstreamForm.set("audio", audio);
-      upstreamForm.set("requestId", requestId.replace(/[^a-zA-Z0-9_-]/g, "_"));
+      const upstreamRequestId = requestId.replace(/[^a-zA-Z0-9_-]/g, "_");
+      upstreamForm.set("requestId", upstreamRequestId);
       upstreamForm.set("stationId", stationId);
       upstreamForm.set("modelId", modelId);
 
@@ -157,6 +159,7 @@ export async function POST(request: Request) {
 
       if (res.ok) {
         const json = (await res.json()) as AIRawResponse;
+        parseModelResult(json, upstreamRequestId, "http");
         rawResponse = {
           ...json,
           source: "http",
@@ -189,7 +192,8 @@ export async function POST(request: Request) {
       confidence: primaryConfidence,
       riskLevel,
       modelVersion: rawResponse.modelVersion ?? "rakforest-audiocnn-multilabel-v1",
-      rawResponse,
+      rawResponse: { ...rawResponse, modelId },
+      processedAt: new Date().toISOString(),
     });
   } catch (error) {
     return NextResponse.json(

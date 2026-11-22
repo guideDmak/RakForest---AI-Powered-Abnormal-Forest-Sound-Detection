@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
+import { POST as classifyAudio } from "../src/app/api/classify-audio/route";
 import { analyzeAudio, modelConfig } from "../src/lib/ml-server";
 import { parseModelResult, validateAudio } from "../src/lib/ml-contract";
 
@@ -17,6 +18,33 @@ async function upstream(handler: (req: IncomingMessage, res: ServerResponse) => 
   }
 }
 const audio = () => new File(["test-audio"], "forest.wav", { type: "audio/wav" });
+
+test("station classifier preserves Softmax model identity and winning-class risk", async () => {
+  await upstream((_request, response) => {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      requestId: "softmax-test",
+      modelVersion: "demo-model",
+      label: "fire",
+      scores: [{ classId: "fire", score: 0.42 }],
+    }));
+  }, async () => {
+    const body = new FormData();
+    body.set("audio", audio());
+    body.set("requestId", "softmax-test");
+    body.set("modelId", "cnn_softmax");
+    const response = await classifyAudio(new Request("http://localhost/api/classify-audio", {
+      method: "POST",
+      body,
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      predictedLabel: "fire",
+      riskLevel: "red",
+      rawResponse: { source: "http", modelId: "cnn_softmax" },
+    });
+  });
+});
 
 test("HTTP adapter forwards actual multipart and bearer key, accepts new classes", async () => {
   let received = false;
@@ -66,7 +94,7 @@ test("result contract rejects duplicate, missing, mismatched, non-finite and non
   expect(() => validateAudio({ name: "x.wav", type: "audio/wav", size: 20 * 1024 * 1024 + 1 })).toThrow("20 MB");
 });
 
-test("Next API validates uploads and returns server-owned source", async ({ request }) => {
+test("Next API validates uploads and returns server-owned source", async ({ request, baseURL }) => {
   const config = await request.get("/api/ml/config"); expect(config.ok()).toBe(true);
   expect(await config.json()).toMatchObject({ mode: "mock", configured: true, provisional: true });
   const send = (name: string, mimeType: string, buffer: Buffer) => request.post("/api/ml/analyze", { multipart: { requestId: "api-test", stationId: "ST-01", audio: { name, mimeType, buffer } } });
@@ -74,7 +102,24 @@ test("Next API validates uploads and returns server-owned source", async ({ requ
   expect(ok.status()).toBe(200); expect(await ok.json()).toMatchObject({ source: "mock", requestId: "api-test", label: "chainsaw" });
   expect((await send("x.txt", "text/plain", Buffer.from("bad"))).status()).toBe(400);
   expect((await send("x.wav", "audio/wav", Buffer.alloc(0))).status()).toBe(400);
-  expect((await send("x.wav", "audio/wav", Buffer.alloc(20 * 1024 * 1024 + 65537))).status()).toBe(413);
+  // The server rejects the Content-Length before reading the payload.
+  const oversizedStatus = await new Promise<number | undefined>((resolve, reject) => {
+    const upload = httpRequest(new URL("/api/ml/analyze", baseURL), {
+      method: "POST",
+      headers: {
+        "Content-Type": "multipart/form-data; boundary=test",
+        "Content-Length": 20 * 1024 * 1024 + 65537,
+        Expect: "100-continue",
+      },
+    }, response => {
+      response.resume();
+      resolve(response.statusCode);
+    });
+    upload.on("error", reject);
+    upload.setTimeout(5000, () => upload.destroy(new Error("Upload rejection timed out")));
+    upload.flushHeaders();
+  });
+  expect(oversizedStatus).toBe(413);
   expect((await request.post("/api/ml/analyze", { data: "invalid" })).status()).toBe(400);
   expect((await request.post("/api/ml/analyze", { headers: { origin: "https://other.invalid" } })).status()).toBe(403);
 });

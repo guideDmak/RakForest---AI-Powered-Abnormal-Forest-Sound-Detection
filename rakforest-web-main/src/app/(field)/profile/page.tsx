@@ -24,6 +24,8 @@ export default function FieldRangerProfilePage() {
     });
   }, []);
 
+  const assignedZones = zones.filter((zone) => profile?.assigned_zone_ids.includes(zone.id));
+
   async function handleLogout() {
     await rakforestRepo.signOut();
     router.push("/login");
@@ -73,7 +75,7 @@ export default function FieldRangerProfilePage() {
             <span className="text-[#526358] block">{t("การเชื่อมต่อ Telegram แจ้งเตือน")}</span>
             <span className="inline-flex items-center gap-1 font-mono-code font-bold text-[#1B4332]">
               <Send className="h-3.5 w-3.5" />
-              Chat ID: {profile?.telegram_chat_id || "1750820064"}
+              {profile?.telegram_chat_id ? `Chat ID: ${profile.telegram_chat_id}` : t("ยังไม่เชื่อมต่อ")}
             </span>
           </div>
         </div>
@@ -81,7 +83,10 @@ export default function FieldRangerProfilePage() {
         <div className="pt-3 border-t border-[#E4ECE6]">
           <p className="text-xs font-bold text-[#14241B] mb-2">{t("โซนป่าอนุรักษ์ในความรับผิดชอบ:")}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {zones.slice(0, 2).map((z) => (
+            {profile && assignedZones.length === 0 && (
+              <p className="text-xs text-[#526358]">{t("ยังไม่ได้กำหนดโซนรับผิดชอบ")}</p>
+            )}
+            {assignedZones.map((z) => (
               <div
                 key={z.id}
                 className="rounded border border-[#D4DCD5] bg-[#F8FAF8] p-2.5 text-xs"
