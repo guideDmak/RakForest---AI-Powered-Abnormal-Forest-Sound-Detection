@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage, useNotice } from "@/lib/i18n/language";
 
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Send } from "lucide-react";
@@ -18,13 +19,13 @@ const CHANNELS = [
 ];
 
 export default function BackofficeAlertSettingsPage() {
+  const { t, language } = useLanguage();
   const [rules, setRules] = useState<NotificationRule[]>([]);
   const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [testBusy, setTestBusy] = useState(false);
-  const [feedback, setFeedback] = useState("");
-  const [testNote, setTestNote] = useState(
-    "ทดสอบการส่งสัญญาณแจ้งเตือนจากศูนย์สั่งการ RakForest เข้ากลุ่มปฏิบัติการ Telegram"
-  );
+  const [feedback, setFeedback] = useNotice();
+  const [draftNote, setTestNote] = useState<string | null>(null);
+  const testNote = draftNote ?? t("ทดสอบการส่งสัญญาณแจ้งเตือนจากศูนย์สั่งการ RakForest เข้ากลุ่มปฏิบัติการ Telegram");
 
   const loadData = useCallback(async () => {
     const [r, l] = await Promise.all([
@@ -50,7 +51,7 @@ export default function BackofficeAlertSettingsPage() {
       channels: nextChannels,
     });
     setRules(updated);
-    setFeedback(`บันทึกการตั้งค่าช่องทางแจ้งเตือนระดับ "${riskLevel}" แล้ว`);
+    setFeedback('บันทึกการตั้งค่าช่องทางแจ้งเตือนระดับ "{risk}" แล้ว', {risk: riskLevel});
   }
 
   async function sendLiveTelegramTest() {
@@ -69,7 +70,8 @@ export default function BackofficeAlertSettingsPage() {
       setFeedback(
         log.status === "sent"
           ? "ส่งข้อความแจ้งเตือนเข้า Telegram สำเร็จแล้ว! กรุณาตรวจสอบในแอป Telegram ของคุณ"
-          : `บันทึกประวัติแล้ว (${log.error_message ?? "ตรวจสอบสถานะด้านล่าง"})`
+          : "บันทึกประวัติแล้ว ({result})",
+        { result: log.error_message || t("ตรวจสอบสถานะด้านล่าง") },
       );
     } finally {
       setTestBusy(false);
@@ -79,12 +81,8 @@ export default function BackofficeAlertSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-[#14241B]">
-          ตั้งค่าการแจ้งเตือนอัตโนมัติ (Telegram Bot API & Multi-Channel Alerts)
-        </h1>
-        <p className="text-xs text-[#526358]">
-          กำหนดเงื่อนไขการส่งข้อความแจ้งเตือนตามระดับความเสี่ยงของเสียงที่โมเดล AI ตรวจพบ และทดสอบส่งข้อความเข้า Telegram จริง
-        </p>
+        <h1 className="text-xl font-bold text-[#14241B]">{t("ตั้งค่าการแจ้งเตือนอัตโนมัติ (Telegram Bot API & Multi-Channel Alerts)")}</h1>
+        <p className="text-xs text-[#526358]">{t("กำหนดเงื่อนไขการส่งข้อความแจ้งเตือนตามระดับความเสี่ยงของเสียงที่โมเดล AI ตรวจพบ และทดสอบส่งข้อความเข้า Telegram จริง")}</p>
       </div>
 
       {feedback && (
@@ -117,9 +115,7 @@ export default function BackofficeAlertSettingsPage() {
             </div>
 
             <div className="pt-3 border-t border-[#E4ECE6] space-y-2">
-              <p className="text-xs font-bold text-[#14241B]">
-                ช่องทางแจ้งเตือนที่เปิดใช้งาน:
-              </p>
+              <p className="text-xs font-bold text-[#14241B]">{t("ช่องทางแจ้งเตือนที่เปิดใช้งาน:")}</p>
               {CHANNELS.map((ch) => (
                 <label
                   key={ch.id}
@@ -130,7 +126,7 @@ export default function BackofficeAlertSettingsPage() {
                     checked={rule.channels.includes(ch.id)}
                     onChange={() => toggleChannel(rule.risk_level, ch.id)}
                   />
-                  <span>{ch.label}</span>
+                  <span>{t(ch.label)}</span>
                 </label>
               ))}
             </div>
@@ -142,12 +138,8 @@ export default function BackofficeAlertSettingsPage() {
       <section className="rounded-lg border border-[#B8C7BC] bg-white p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E4ECE6] pb-3">
           <div>
-            <h2 className="text-base font-bold text-[#14241B]">
-              ทดสอบส่งข้อความแจ้งเตือนเข้า Telegram จริง (Live Telegram Dispatch)
-            </h2>
-            <p className="text-xs text-[#526358]">
-              เชื่อมต่อกับ TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID (1750820064) ที่ตั้งค่าไว้ในระบบ
-            </p>
+            <h2 className="text-base font-bold text-[#14241B]">{t("ทดสอบส่งข้อความแจ้งเตือนเข้า Telegram จริง (Live Telegram Dispatch)")}</h2>
+            <p className="text-xs text-[#526358]">{t("เชื่อมต่อกับ TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID (1750820064) ที่ตั้งค่าไว้ในระบบ")}</p>
           </div>
           <span className="rounded bg-emerald-50 border border-emerald-300 px-2.5 py-1 font-mono-code text-xs font-semibold text-emerald-800">
             ● Telegram Bot Active
@@ -156,9 +148,7 @@ export default function BackofficeAlertSettingsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
           <div className="md:col-span-9">
-            <label className="block text-xs font-semibold text-[#14241B] mb-1">
-              ข้อความคำสั่งการทดสอบที่จะส่งเข้า Telegram
-            </label>
+            <label className="block text-xs font-semibold text-[#14241B] mb-1">{t("ข้อความคำสั่งการทดสอบที่จะส่งเข้า Telegram")}</label>
             <input
               type="text"
               value={testNote}
@@ -174,7 +164,7 @@ export default function BackofficeAlertSettingsPage() {
               className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#1B4332] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-[#2D6A4F] disabled:opacity-50"
             >
               <Send className="h-4 w-4" />
-              <span>{testBusy ? "กำลังส่งเข้า Telegram…" : "ส่งข้อความทดสอบ"}</span>
+              <span>{testBusy ? t("กำลังส่งเข้า Telegram…") : t("ส่งข้อความทดสอบ")}</span>
             </button>
           </div>
         </div>
@@ -182,9 +172,7 @@ export default function BackofficeAlertSettingsPage() {
 
       {/* Notification Logs History */}
       <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 sm:p-5 space-y-3">
-        <h2 className="text-base font-bold text-[#14241B]">
-          ประวัติการส่งข้อความแจ้งเตือนย้อนหลัง
-        </h2>
+        <h2 className="text-base font-bold text-[#14241B]">{t("ประวัติการส่งข้อความแจ้งเตือนย้อนหลัง")}</h2>
         <div className="space-y-2.5">
           {logs.map((log) => (
             <div
@@ -203,10 +191,10 @@ export default function BackofficeAlertSettingsPage() {
                         : "bg-red-100 text-red-900"
                     }`}
                   >
-                    {log.status === "sent" ? "ส่งสำเร็จ" : "ล้มเหลว"}
+                    {log.status === "sent" ? t("ส่งสำเร็จ") : t("ล้มเหลว")}
                   </span>
                   <span className="text-[#526358]">
-                    {new Date(log.sent_at).toLocaleString("th-TH", {
+                    {new Date(log.sent_at).toLocaleString(language === "en" ? "en-GB" : "th-TH", {
                       dateStyle: "short",
                       timeStyle: "medium",
                     })}

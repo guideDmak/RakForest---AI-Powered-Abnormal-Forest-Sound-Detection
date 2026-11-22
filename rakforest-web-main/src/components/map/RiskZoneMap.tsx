@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
@@ -67,6 +68,7 @@ export default function RiskZoneMap({
   heightClass = "h-[520px]",
   showLayerControls = true,
 }: Props) {
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
@@ -556,7 +558,7 @@ export default function RiskZoneMap({
         badge.style.whiteSpace = "nowrap";
         badge.dataset.zoneLabel = z.id;
         badge.setAttribute("aria-label", z.name);
-        badge.title = `${z.zone_code} · ${z.name} (คลิกเพื่อซูมดูขอบเขตโซนป่า)`;
+        badge.title = `${z.zone_code} · ${z.name} ${t("(คลิกเพื่อซูมดูขอบเขตโซนป่า)")}`;
         badge.onclick = (e) => {
           e.stopPropagation();
           if (
@@ -603,7 +605,7 @@ export default function RiskZoneMap({
           .filter(Boolean)
           .join(" ");
         btn.textContent = `📡 ${st.station_code}`;
-        btn.title = `${st.station_code} · ${st.name} (รัศมี ${st.radius_meters} ม.)`;
+        btn.title = `${st.station_code} · ${st.name} ${t("(รัศมี")} ${st.radius_meters} ${t("ม.)")}`;
         btn.onclick = (e) => {
           e.stopPropagation();
           if (
@@ -636,7 +638,7 @@ export default function RiskZoneMap({
           rep.id === selectedReportId ? "ring-4 ring-amber-300" : ""
         }`;
         el.textContent = rep.risk_level === "red" ? "!" : "•";
-        el.title = `${rep.report_code} (${rep.description || "รายงานเหตุการณ์"})`;
+        el.title = `${rep.report_code} (${rep.description || t("รายงานเหตุการณ์")})`;
         el.onclick = (e) => {
           e.stopPropagation();
           callbacksRef.current.onSelectReport?.(rep.id);
@@ -697,6 +699,7 @@ export default function RiskZoneMap({
       map.off("resize", avoidLabelOverlap);
     };
   }, [
+    t,
     ready,
     zones,
     stations,
@@ -722,7 +725,7 @@ export default function RiskZoneMap({
       button.textContent = String(index + 1);
       button.className =
         "h-9 w-9 rounded-full border-2 border-white shadow-md text-sm font-bold text-white";
-      button.setAttribute("aria-label", `จุดขอบเขต ${index + 1}`);
+      button.setAttribute("aria-label", `${t("จุดขอบเขต")} ${index + 1}`);
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         callbacksRef.current.onSelectPolygonPoint?.(index);
@@ -744,7 +747,7 @@ export default function RiskZoneMap({
       markers.forEach((m) => m.remove());
       polygonMarkersRef.current = [];
     };
-  }, [ready, editMode, draftPolygonCoords]);
+  }, [t, ready, editMode, draftPolygonCoords]);
 
   useEffect(() => {
     polygonMarkersRef.current.forEach((marker, index) => {
@@ -756,7 +759,7 @@ export default function RiskZoneMap({
       button.classList.toggle("bg-amber-600", selectedPolygonPoint === index);
       button.classList.toggle("bg-blue-700", selectedPolygonPoint !== index);
     });
-  }, [ready, editMode, draftPolygonCoords, selectedPolygonPoint]);
+  }, [t, ready, editMode, draftPolygonCoords, selectedPolygonPoint]);
 
   return (
     <div
@@ -774,7 +777,7 @@ export default function RiskZoneMap({
             className="inline-flex items-center gap-1.5 rounded-md border border-[#B8C7BC] bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#14241B] shadow-xs hover:bg-[#EBF2ED] whitespace-nowrap"
           >
             <Radio className="h-3.5 w-3.5 text-[#1B4332]" />
-            <span>เสาไมค์แม่ริม–แม่แตง</span>
+            <span>{t("เสาไมค์แม่ริม–แม่แตง")}</span>
           </button>
           <button
             type="button"
@@ -787,7 +790,7 @@ export default function RiskZoneMap({
             className="inline-flex items-center gap-1.5 rounded-md border border-[#B8C7BC] bg-white/95 px-2.5 py-1 text-xs font-semibold text-[#14241B] shadow-xs hover:bg-[#EBF2ED] whitespace-nowrap"
           >
             <Maximize2 className="h-3.5 w-3.5 text-[#1B4332]" />
-            <span>ทั่วประเทศ</span>
+            <span>{t("ทั่วประเทศ")}</span>
           </button>
           {selectedZoneId && (
             <button
@@ -799,7 +802,7 @@ export default function RiskZoneMap({
               className="inline-flex items-center gap-1.5 rounded-md border border-[#1B4332] bg-[#1B4332] px-2.5 py-1 text-xs font-semibold text-white shadow-xs whitespace-nowrap"
             >
               <Navigation className="h-3.5 w-3.5" />
-              <span>ซูมเข้าโซนที่เลือก</span>
+              <span>{t("ซูมเข้าโซนที่เลือก")}</span>
             </button>
           )}
         </div>
@@ -825,7 +828,7 @@ export default function RiskZoneMap({
                       : "text-[#526358] hover:text-[#14241B]"
                   }`}
                 >
-                  {item.label}
+                  {t(item.label)}
                 </button>
               ))}
               <button
@@ -834,14 +837,14 @@ export default function RiskZoneMap({
                 className="ml-0.5 inline-flex items-center gap-1 rounded border border-[#D4DCD5] bg-[#F4F7F4] px-2 py-0.5 text-xs font-semibold text-[#1B4332] whitespace-nowrap"
               >
                 <Layers className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">ชั้นข้อมูล</span>
+                <span className="hidden sm:inline">{t("ชั้นข้อมูล")}</span>
               </button>
             </div>
 
             {layerDrawerOpen && (
               <div className="w-60 rounded-lg border border-[#B8C7BC] bg-white/98 p-3 shadow-lg text-xs space-y-2">
                 <p className="font-bold text-[#14241B] border-b border-[#E5ECE6] pb-1.5">
-                  เปิด/ปิดชั้นข้อมูล GIS
+                  {t("เปิด/ปิดชั้นข้อมูล GIS")}
                 </p>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -849,7 +852,7 @@ export default function RiskZoneMap({
                     checked={showZones}
                     onChange={(e) => setShowZones(e.target.checked)}
                   />
-                  <span>ขอบเขตโซนป่าไม้ (Polygons)</span>
+                  <span>{t("ขอบเขตโซนป่าไม้ (Polygons)")}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -857,7 +860,7 @@ export default function RiskZoneMap({
                     checked={showStations}
                     onChange={(e) => setShowStations(e.target.checked)}
                   />
-                  <span>เสาไมค์ตรวจจับเสียง (ST-XX)</span>
+                  <span>{t("เสาไมค์ตรวจจับเสียง (ST-XX)")}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -865,7 +868,7 @@ export default function RiskZoneMap({
                     checked={showRadii}
                     onChange={(e) => setShowRadii(e.target.checked)}
                   />
-                  <span>วงรัศมีรับเสียงของเสาไมค์</span>
+                  <span>{t("วงรัศมีรับเสียงของเสาไมค์")}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -873,7 +876,7 @@ export default function RiskZoneMap({
                     checked={showReports}
                     onChange={(e) => setShowReports(e.target.checked)}
                   />
-                  <span>หมุดเหตุการณ์แจ้งเตือน</span>
+                  <span>{t("หมุดเหตุการณ์แจ้งเตือน")}</span>
                 </label>
               </div>
             )}
@@ -885,19 +888,19 @@ export default function RiskZoneMap({
       <div className="absolute bottom-3 left-3 z-10 hidden sm:flex flex-wrap items-center gap-3 rounded-md border border-[#B8C7BC] bg-white/95 px-3 py-1.5 text-[11px] font-medium text-[#14241B] shadow-sm">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[#D62828]" />
-          เสี่ยงสูง (ไฟป่า/เลื่อยยนต์/ปืน)
+          {t("เสี่ยงสูง (ไฟป่า/เลื่อยยนต์/ปืน)")}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[#F4A300]" />
-          เฝ้าระวัง (ยานพาหนะ/บุกรุก)
+          {t("เฝ้าระวัง (ยานพาหนะ/บุกรุก)")}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[#2D8A3E]" />
-          ปกติ
+          {t("ปกติ")}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded border border-dashed border-[#1B4332] bg-[#2D6A4F]/25" />
-          รัศมีรับเสียงเสาไมค์
+          {t("รัศมีรับเสียงเสาไมค์")}
         </span>
       </div>
     </div>

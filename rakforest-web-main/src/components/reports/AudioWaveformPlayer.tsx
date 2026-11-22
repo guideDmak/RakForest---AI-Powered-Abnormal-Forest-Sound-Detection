@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw, Volume2 } from "lucide-react";
@@ -25,6 +26,7 @@ export default function AudioWaveformPlayer({
   predictedLabel = "chainsaw",
   segments = [],
 }: Props) {
+  const { t } = useLanguage();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const synthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -209,7 +211,7 @@ export default function AudioWaveformPlayer({
         <div className="flex items-center gap-2 text-xs text-[#526358]">
           {activeSegment && (
             <span className="rounded bg-[#1B4332]/10 px-2 py-0.5 font-mono-code text-[11px] font-medium text-[#1B4332]">
-              หน้าต่างเวลา #{activeSegment.segmentIndex + 1} (
+              {t("หน้าต่างเวลา #")}{activeSegment.segmentIndex + 1} (
               {formatAudioTimestamp(activeSegment.startSeconds)}–
               {formatAudioTimestamp(activeSegment.endSeconds)})
             </span>
@@ -225,7 +227,7 @@ export default function AudioWaveformPlayer({
         <button
           type="button"
           onClick={togglePlay}
-          aria-label={playing ? "หยุดชั่วคราว" : "เล่นเสียง"}
+          aria-label={playing ? t("หยุดชั่วคราว") : t("เล่นเสียง")}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#1B4332] text-white hover:bg-[#2D6A4F] transition-colors"
         >
           {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
@@ -271,8 +273,8 @@ export default function AudioWaveformPlayer({
         <button
           type="button"
           onClick={() => seekTo(0)}
-          title="เริ่มเล่นใหม่ตั้งแต่ต้น"
-          aria-label="เริ่มเล่นใหม่ตั้งแต่ต้น"
+          title={t("เริ่มเล่นใหม่ตั้งแต่ต้น")}
+          aria-label={t("เริ่มเล่นใหม่ตั้งแต่ต้น")}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#D4DCD5] bg-white text-[#526358] hover:text-[#14241B] hover:bg-slate-50"
         >
           <RotateCcw className="h-4 w-4" />
@@ -283,7 +285,7 @@ export default function AudioWaveformPlayer({
       {mergedRanges.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[#E2E8E3]">
           <p className="text-xs font-semibold text-[#526358] mb-2">
-            กดปุ่มช่วงเวลาด้านล่างเพื่อกรอเสียงไปยังจุดเกิดเหตุทันที:
+            {t("กดปุ่มช่วงเวลาด้านล่างเพื่อกรอเสียงไปยังจุดเกิดเหตุทันที:")}
           </p>
           <div className="flex flex-wrap gap-2.5">
             {mergedRanges.map((entry) =>
@@ -306,7 +308,7 @@ export default function AudioWaveformPlayer({
                     }`}
                   >
                     <Play className="h-3.5 w-3.5 shrink-0" />
-                    <span>{getClassNameTh(entry.classId)}</span>
+                    <span>{t(getClassNameTh(entry.classId))}</span>
                     <span className="font-mono-code font-bold">
                       {formatAudioTimestamp(r.startSeconds)}–
                       {formatAudioTimestamp(r.endSeconds)}

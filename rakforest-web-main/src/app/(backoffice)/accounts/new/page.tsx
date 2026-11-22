@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -63,6 +64,7 @@ const steps = [
 ] as const;
 
 export default function NewAccountPage() {
+  const { t } = useLanguage();
   const [input, setInput] = useState<CreateAccountInput>(empty),
     [confirm, setConfirm] = useState(""),
     [showPassword, setShowPassword] = useState(false);
@@ -235,16 +237,14 @@ export default function NewAccountPage() {
       lock.current = false;
     }
   }
-  if (authError) return <p role="alert">{authError}</p>;
-  if (allowed === undefined) return <p role="status">กำลังตรวจสอบผู้ใช้งาน…</p>;
+  if (authError) return <p role="alert">{t(authError)}</p>;
+  if (allowed === undefined) return <p role="status">{t("กำลังตรวจสอบผู้ใช้งาน…")}</p>;
   if (!allowed)
     return (
       <section className={panel}>
-        <h1 className="text-xl font-bold">เฉพาะผู้ดูแลระบบ</h1>
-        <p>กรุณาติดต่อผู้ดูแลเพื่อเพิ่มเจ้าหน้าที่</p>
-        <Link href="/accounts" className={secondary}>
-          กลับรายการ
-        </Link>
+        <h1 className="text-xl font-bold">{t("เฉพาะผู้ดูแลระบบ")}</h1>
+        <p>{t("กรุณาติดต่อผู้ดูแลเพื่อเพิ่มเจ้าหน้าที่")}</p>
+        <Link href="/accounts" className={secondary}>{t("กลับรายการ")}</Link>
       </section>
     );
   const errorBlock = error && (
@@ -254,14 +254,12 @@ export default function NewAccountPage() {
       role="alert"
       className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800"
     >
-      <p>{error}</p>
+      <p>{t(error)}</p>
       {errorField === "employee_code" && (
         <Link
           className="mt-2 inline-flex min-h-11 items-center underline"
           href={"/accounts?q=" + encodeURIComponent(input.employee_code.trim())}
-        >
-          ค้นหาบัญชีเดิม
-        </Link>
+        >{t("ค้นหาบัญชีเดิม")}</Link>
       )}
     </div>
   );
@@ -276,24 +274,22 @@ export default function NewAccountPage() {
   const complete = profile && profile.role !== "pending_verification";
   return (
     <div className="mx-auto max-w-3xl space-y-5 text-[#14241B]">
-      <Link href="/accounts" className={secondary}>
-        ← กลับรายการเจ้าหน้าที่
-      </Link>
+      <Link href="/accounts" className={secondary}>{t("← กลับรายการเจ้าหน้าที่")}</Link>
       <header>
         <h1 ref={summary} tabIndex={-1} className="text-2xl font-bold">
           {profile
             ? profile.role === "pending_verification"
-              ? "ตรวจและอนุมัติบัญชี"
-              : "เปิดใช้งานบัญชีแล้ว"
-            : "ลงทะเบียนเจ้าหน้าที่ใหม่"}
+              ? t("ตรวจและอนุมัติบัญชี")
+              : t("เปิดใช้งานบัญชีแล้ว")
+            : t("ลงทะเบียนเจ้าหน้าที่ใหม่")}
         </h1>
         <p className="mt-1 text-sm text-[#526358]">
           {profile
-            ? "บันทึกข้อมูลเจ้าหน้าที่เรียบร้อยแล้ว"
-            : "กรอกข้อมูล แนบบัตรถ้ามี แล้วตรวจและอนุมัติการเข้าใช้งาน"}
+            ? t("บันทึกข้อมูลเจ้าหน้าที่เรียบร้อยแล้ว")
+            : t("กรอกข้อมูล แนบบัตรถ้ามี แล้วตรวจและอนุมัติการเข้าใช้งาน")}
         </p>
       </header>
-      <ol aria-label="ขั้นตอนลงทะเบียน" className="grid grid-cols-3 gap-2">
+      <ol aria-label={t("ขั้นตอนลงทะเบียน")} className="grid grid-cols-3 gap-2">
         {steps.map(({ label, icon: Icon }, index) => {
           const number = index + 1;
           const active = currentStep === number;
@@ -310,7 +306,7 @@ export default function NewAccountPage() {
                 <Icon size={16} aria-hidden="true" />
               )}
               <span>
-                {number}. {label}
+                {number}. {t(label)}
               </span>
             </li>
           );
@@ -328,27 +324,20 @@ export default function NewAccountPage() {
               />
               {errorBlock}
               <div className="flex flex-wrap justify-end gap-2">
-                <Link className={secondary} href="/accounts">
-                  อนุมัติภายหลัง
-                </Link>
+                <Link className={secondary} href="/accounts">{t("อนุมัติภายหลัง")}</Link>
                 <button
                   className={primary}
                   disabled={busy}
                   onClick={() => void approve()}
                 >
-                  {busy ? "กำลังอนุมัติ…" : "อนุมัติเปิดใช้งาน"}
+                  {busy ? t("กำลังอนุมัติ…") : t("อนุมัติเปิดใช้งาน")}
                 </button>
               </div>
             </>
           ) : (
             <>
-              <p role="status">
-                บัญชีของ {profile.full_name} ({profile.employee_code})
-                พร้อมเข้าใช้งานแล้ว
-              </p>
-              <Link href="/accounts" className={primary}>
-                กลับรายการเจ้าหน้าที่
-              </Link>
+              <p role="status">{t("บัญชีของ ")}{profile.full_name} ({profile.employee_code}{t(") พร้อมเข้าใช้งานแล้ว")}</p>
+              <Link href="/accounts" className={primary}>{t("กลับรายการเจ้าหน้าที่")}</Link>
             </>
           )}
         </section>
@@ -365,22 +354,20 @@ export default function NewAccountPage() {
             className="border-b border-[#D4DCD5] pb-3 text-lg font-semibold"
           >
             {step === 1
-              ? "ขั้นตอนที่ 1: ข้อมูลเจ้าหน้าที่และพื้นที่รับผิดชอบ"
-              : "ขั้นตอนที่ 2: แนบบัตรเจ้าหน้าที่ (ไม่บังคับ)"}
+              ? t("ขั้นตอนที่ 1: ข้อมูลเจ้าหน้าที่และพื้นที่รับผิดชอบ")
+              : t("ขั้นตอนที่ 2: แนบบัตรเจ้าหน้าที่ (ไม่บังคับ)")}
           </h2>
           <fieldset disabled={busy} className="min-w-0" hidden={step !== 1}>
             <div className="space-y-5">
-              {codeLoading && <p role="status">กำลังสร้างรหัสเจ้าหน้าที่…</p>}
+              {codeLoading && <p role="status">{t("กำลังสร้างรหัสเจ้าหน้าที่…")}</p>}
               {codeError && (
                 <div role="alert">
-                  <p>{codeError}</p>
+                  <p>{t(codeError)}</p>
                   <button
                     type="button"
                     className={secondary}
                     onClick={() => void generateCode()}
-                  >
-                    สร้างรหัสอีกครั้ง
-                  </button>
+                  >{t("สร้างรหัสอีกครั้ง")}</button>
                 </div>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
@@ -390,8 +377,8 @@ export default function NewAccountPage() {
                       htmlFor={field.key}
                       className="mb-1 block text-sm font-semibold"
                     >
-                      {field.label}
-                      {"required" in field ? " *" : " (ไม่บังคับ)"}
+                      {t(field.label)}
+                      {"required" in field ? " *" : t(" (ไม่บังคับ)")}
                     </label>
                     <input
                       id={field.key}
@@ -414,7 +401,7 @@ export default function NewAccountPage() {
                               : "off"
                       }
                       placeholder={
-                        "placeholder" in field ? field.placeholder : undefined
+                        "placeholder" in field ? t(field.placeholder) : undefined
                       }
                       aria-required={"required" in field}
                       aria-invalid={errorField === field.key}
@@ -429,9 +416,7 @@ export default function NewAccountPage() {
                 ))}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-sm font-semibold">
-                  ตำแหน่งหน้าที่
-                  <select
+                <label className="block text-sm font-semibold">{t("ตำแหน่งหน้าที่")}<select
                     className={control + " mt-1"}
                     value={positionChoice}
                     onChange={(e) => {
@@ -450,19 +435,17 @@ export default function NewAccountPage() {
                       );
                     }}
                   >
-                    <option value="">เลือกตำแหน่ง</option>
+                    <option value="">{t("เลือกตำแหน่ง")}</option>
                     {positions.map((p) => (
                       <option key={p.name} value={p.name}>
-                        {p.name}
+                        {t(p.name)}
                       </option>
                     ))}
-                    <option value="other">อื่น ๆ ระบุเอง</option>
+                    <option value="other">{t("อื่น ๆ ระบุเอง")}</option>
                   </select>
                 </label>
                 {positionChoice === "other" && (
-                  <label className="block text-sm font-semibold">
-                    ระบุตำแหน่ง
-                    <input
+                  <label className="block text-sm font-semibold">{t("ระบุตำแหน่ง")}<input
                       className={control}
                       value={input.position}
                       onChange={(e) =>
@@ -471,9 +454,7 @@ export default function NewAccountPage() {
                     />
                   </label>
                 )}
-                <label className="block text-sm font-semibold">
-                  บทบาทที่เสนอ
-                  <select
+                <label className="block text-sm font-semibold">{t("บทบาทที่เสนอ")}<select
                     id="targetRole"
                     className={control + " mt-1"}
                     value={input.targetRole}
@@ -496,15 +477,10 @@ export default function NewAccountPage() {
                   id="password-title"
                   className="flex items-center gap-2 text-sm font-semibold"
                 >
-                  <LockKeyhole size={16} aria-hidden="true" /> รหัสผ่านเข้าใช้งาน
-                </h3>
-                <p id="password-hint" className="text-sm text-[#526358]">
-                  อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก ตัวพิมพ์ใหญ่ และตัวเลข
-                </p>
+                  <LockKeyhole size={16} aria-hidden="true" />{t(" รหัสผ่านเข้าใช้งาน")}</h3>
+                <p id="password-hint" className="text-sm text-[#526358]">{t("อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก ตัวพิมพ์ใหญ่ และตัวเลข")}</p>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm font-semibold">
-                    รหัสผ่าน *
-                    <input
+                  <label className="block text-sm font-semibold">{t("รหัสผ่าน *")}<input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       className={control + " mt-1"}
@@ -522,9 +498,7 @@ export default function NewAccountPage() {
                       }
                     />
                   </label>
-                  <label className="block text-sm font-semibold">
-                    ยืนยันรหัสผ่าน *
-                    <input
+                  <label className="block text-sm font-semibold">{t("ยืนยันรหัสผ่าน *")}<input
                       id="confirm_password"
                       type={showPassword ? "text" : "password"}
                       className={control + " mt-1"}
@@ -546,11 +520,9 @@ export default function NewAccountPage() {
                     type="checkbox"
                     checked={showPassword}
                     onChange={(e) => setShowPassword(e.target.checked)}
-                  />
-                  แสดงรหัสผ่าน
-                </label>
+                  />{t("แสดงรหัสผ่าน")}</label>
                 <ul
-                  aria-label="เงื่อนไขรหัสผ่าน"
+                  aria-label={t("เงื่อนไขรหัสผ่าน")}
                   className="flex flex-wrap gap-2 text-xs"
                 >
                   {passwordRules.map(([label, met]) => (
@@ -560,31 +532,25 @@ export default function NewAccountPage() {
                     >
                       <span aria-hidden="true">{met ? "✓ " : "○ "}</span>
                       <span className="sr-only">
-                        {met ? "ผ่าน: " : "ยังไม่ผ่าน: "}
+                        {met ? t("ผ่าน: ") : t("ยังไม่ผ่าน: ")}
                       </span>
-                      {label}
+                      {t(label)}
                     </li>
                   ))}
                 </ul>
               </section>
               <fieldset className="min-w-0 space-y-2">
-                <legend className="text-sm font-semibold">
-                  พื้นที่รับผิดชอบ (ไม่บังคับ)
-                </legend>
+                <legend className="text-sm font-semibold">{t("พื้นที่รับผิดชอบ (ไม่บังคับ)")}</legend>
                 {zonesLoading ? (
-                  <p role="status" className="text-sm">
-                    กำลังโหลดพื้นที่…
-                  </p>
+                  <p role="status" className="text-sm">{t("กำลังโหลดพื้นที่…")}</p>
                 ) : zoneError ? (
                   <div role="alert" className="text-sm">
-                    <p>{zoneError}</p>
+                    <p>{t(zoneError)}</p>
                     <button
                       type="button"
                       className={secondary + " mt-2"}
                       onClick={() => void loadZones()}
-                    >
-                      ลองโหลดพื้นที่ใหม่
-                    </button>
+                    >{t("ลองโหลดพื้นที่ใหม่")}</button>
                   </div>
                 ) : zones.length ? (
                   <div className="grid gap-2 sm:grid-cols-2">
@@ -612,20 +578,15 @@ export default function NewAccountPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-[#526358]">ยังไม่มีพื้นที่ให้เลือก</p>
+                  <p className="text-sm text-[#526358]">{t("ยังไม่มีพื้นที่ให้เลือก")}</p>
                 )}
               </fieldset>
             </div>
           </fieldset>
           <fieldset disabled={busy} className="min-w-0" hidden={step !== 2}>
             <div className="space-y-3">
-              <p id="card-hint" className="text-sm text-[#526358]">
-                เลือกภาพบัตรเพื่อให้ผู้ดูแลตรวจสอบ หรือบันทึกโดยไม่แนบไฟล์ได้ ใช้ JPEG, PNG หรือ
-                WebP ไม่เกิน 5 MB
-              </p>
-              <label htmlFor="id_card" className="block text-sm">
-                ภาพบัตรเจ้าหน้าที่
-              </label>
+              <p id="card-hint" className="text-sm text-[#526358]">{t("เลือกภาพบัตรเพื่อให้ผู้ดูแลตรวจสอบ หรือบันทึกโดยไม่แนบไฟล์ได้ ใช้ JPEG, PNG หรือ WebP ไม่เกิน 5 MB")}</p>
+              <label htmlFor="id_card" className="block text-sm">{t("ภาพบัตรเจ้าหน้าที่")}</label>
               <input
                 id="id_card"
                 type="file"
@@ -654,9 +615,7 @@ export default function NewAccountPage() {
                     ) as HTMLInputElement;
                     el.value = "";
                   }}
-                >
-                  เอาไฟล์ออก
-                </button>
+                >{t("เอาไฟล์ออก")}</button>
               )}
             </div>
           </fieldset>
@@ -668,14 +627,11 @@ export default function NewAccountPage() {
                 className={secondary}
                 disabled={busy}
                 onClick={() => goToStep(1)}
-              >
-                ย้อนกลับ
-              </button>
+              >{t("ย้อนกลับ")}</button>
             )}
             <button className={primary + " w-full sm:w-auto"} disabled={busy}>
               {step === 1 ? (
-                <span className="inline-flex items-center gap-2">
-                  ถัดไป: แนบบัตรเจ้าหน้าที่{" "}
+                <span className="inline-flex items-center gap-2">{t("ถัดไป: แนบบัตรเจ้าหน้าที่")}{" "}
                   <ArrowRight size={16} aria-hidden="true" />
                 </span>
               ) : busy ? (

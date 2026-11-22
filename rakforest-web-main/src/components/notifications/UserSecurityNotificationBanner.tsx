@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle, ShieldAlert, X } from "lucide-react";
@@ -6,6 +7,7 @@ import { rakforestRepo } from "@/lib/supabase/repository";
 import type { UserNotification } from "@/types/database.types";
 
 export default function UserSecurityNotificationBanner() {
+  const { t } = useLanguage();
   const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -52,10 +54,10 @@ export default function UserSecurityNotificationBanner() {
             </div>
             <div>
               <h4 className="text-sm font-bold text-amber-950">
-                {notif.title}
+                {t(notif.title)}
               </h4>
               <p className="text-xs text-amber-900 mt-0.5 leading-relaxed">
-                {notif.message}
+                {t(notif.message)}
               </p>
             </div>
           </div>
@@ -68,7 +70,7 @@ export default function UserSecurityNotificationBanner() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-amber-800 hover:bg-amber-900 text-white px-3.5 py-1.5 text-xs font-semibold shadow-xs transition"
             >
               <CheckCircle className="h-3.5 w-3.5" />
-              <span>รับทราบแล้ว</span>
+              <span>{t("รับทราบแล้ว")}</span>
             </button>
           </div>
         </div>

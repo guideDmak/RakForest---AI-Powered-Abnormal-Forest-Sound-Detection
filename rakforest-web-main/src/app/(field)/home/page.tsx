@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -31,6 +32,7 @@ const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
 });
 
 export default function FieldRangerHomePage() {
+  const { t } = useLanguage();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [zones, setZones] = useState<ForestZone[]>([]);
   const [stations, setStations] = useState<SensorStation[]>([]);
@@ -76,14 +78,11 @@ export default function FieldRangerHomePage() {
       <section className="rounded-2xl border border-[#234937] bg-gradient-to-br from-[#163628] to-[#112A1F] p-4 sm:p-5 text-white shadow-xs space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#2D6A4F]/90 px-2.5 py-0.5 text-[11px] font-semibold text-[#B7E4C7]">
-              ● ชุดปฏิบัติการลาดตระเวนและตรวจสอบเสาไมค์
-            </span>
-            <h1 className="mt-1 text-lg sm:text-xl font-bold tracking-tight">
-              สวัสดี {profile?.full_name ?? "สมชาย ใจดี"}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#2D6A4F]/90 px-2.5 py-0.5 text-[11px] font-semibold text-[#B7E4C7]">{t("● ชุดปฏิบัติการลาดตระเวนและตรวจสอบเสาไมค์")}</span>
+            <h1 className="mt-1 text-lg sm:text-xl font-bold tracking-tight">{t("สวัสดี ")}{profile?.full_name ?? t("สมชาย ใจดี")}
             </h1>
             <p className="text-xs text-[#B7E4C7]/90">
-              {profile?.department ?? "หน่วยพิทักษ์ป่าแม่ริม–สะเมิง"} • รหัส{" "}
+              {profile?.department ?? t("หน่วยพิทักษ์ป่าแม่ริม–สะเมิง")}{t(" • รหัส")}{" "}
               <span className="font-mono-code font-semibold text-white">
                 {profile?.employee_code ?? "RF-RNG-108"}
               </span>
@@ -96,18 +95,18 @@ export default function FieldRangerHomePage() {
           <div className="rounded-xl border border-red-400/30 bg-red-950/50 px-3 py-2.5">
             <div className="flex items-center gap-1 text-[11px] font-medium text-red-200">
               <ShieldAlert className="h-3.5 w-3.5 text-red-400 shrink-0" />
-              <span className="truncate">งานด่วนรอตรวจ</span>
+              <span className="truncate">{t("งานด่วนรอตรวจ")}</span>
             </div>
             <p className="mt-0.5 font-mono-code text-xl sm:text-2xl font-extrabold text-white">
               {urgentStationTasks.length}{" "}
-              <span className="text-xs font-normal text-red-200">งาน</span>
+              <span className="text-xs font-normal text-red-200">{t("งาน")}</span>
             </p>
           </div>
 
           <div className="rounded-xl border border-emerald-400/30 bg-emerald-950/40 px-3 py-2.5">
             <div className="flex items-center gap-1 text-[11px] font-medium text-emerald-200">
               <Radio className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-              <span className="truncate">เสาไมค์ออนไลน์</span>
+              <span className="truncate">{t("เสาไมค์ออนไลน์")}</span>
             </div>
             <p className="mt-0.5 font-mono-code text-xl sm:text-2xl font-extrabold text-white">
               {onlineStationCount}/{stations.length}
@@ -117,11 +116,11 @@ export default function FieldRangerHomePage() {
           <div className="rounded-xl border border-amber-400/30 bg-amber-950/40 px-3 py-2.5">
             <div className="flex items-center gap-1 text-[11px] font-medium text-amber-200">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span className="truncate">โซนเฝ้าระวัง</span>
+              <span className="truncate">{t("โซนเฝ้าระวัง")}</span>
             </div>
             <p className="mt-0.5 font-mono-code text-xl sm:text-2xl font-extrabold text-white">
               {alertZoneCount}{" "}
-              <span className="text-xs font-normal text-amber-200">โซน</span>
+              <span className="text-xs font-normal text-amber-200">{t("โซน")}</span>
             </p>
           </div>
         </div>
@@ -133,19 +132,14 @@ export default function FieldRangerHomePage() {
         <div className="lg:col-span-7 space-y-3.5">
           <div className="flex items-center justify-between px-0.5">
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-[#14241B]">
-                ภารกิจด่วนจากเสาไมค์ ({urgentStationTasks.length})
+              <h2 className="text-base sm:text-lg font-bold text-[#14241B]">{t("ภารกิจด่วนจากเสาไมค์ (")}{urgentStationTasks.length})
               </h2>
-              <p className="text-xs text-[#526358]">
-                กดรับงานหรือกดนำทางไปยังเสาไมโครโฟนเพื่อตรวจสอบพื้นที่ทันที
-              </p>
+              <p className="text-xs text-[#526358]">{t("กดรับงานหรือกดนำทางไปยังเสาไมโครโฟนเพื่อตรวจสอบพื้นที่ทันที")}</p>
             </div>
             <Link
               href="/field-reports"
               className="text-xs font-bold text-[#1B4332] hover:underline whitespace-nowrap"
-            >
-              ดูทั้งหมด →
-            </Link>
+            >{t("ดูทั้งหมด →")}</Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3">
@@ -188,7 +182,7 @@ export default function FieldRangerHomePage() {
                                 : "text-[#2D8A3E]"
                           }`}
                         >
-                          {getClassNameTh(ai.predicted_label)}
+                          {t(getClassNameTh(ai.predicted_label))}
                         </span>
                         <span
                           className={`font-mono-code text-sm sm:text-base font-extrabold ${
@@ -209,7 +203,7 @@ export default function FieldRangerHomePage() {
                         <Radio className="h-3.5 w-3.5 shrink-0" />
                         {task.sensor_stations
                           ? `${task.sensor_stations.station_code} · ${task.sensor_stations.name}`
-                          : "พิกัดแจ้งเหตุลาดตระเวน"}
+                          : t("พิกัดแจ้งเหตุลาดตระเวน")}
                       </span>
                       <a
                         href={`https://www.google.com/maps/search/?api=1&query=${task.lat},${task.lng}`}
@@ -218,7 +212,7 @@ export default function FieldRangerHomePage() {
                         className="inline-flex items-center gap-1 font-mono-code text-[11px] text-[#1B4332] underline"
                       >
                         <Navigation className="h-3 w-3" />
-                        <span>นำทาง GPS</span>
+                        <span>{t("นำทาง GPS")}</span>
                         <ExternalLink className="h-2.5 w-2.5" />
                       </a>
                     </div>
@@ -226,10 +220,10 @@ export default function FieldRangerHomePage() {
 
                   {/* Dispatch Instruction */}
                   <p className="text-xs text-[#435449] leading-relaxed">
-                    <strong className="text-[#14241B]">คำสั่งการ:</strong>{" "}
+                    <strong className="text-[#14241B]">{t("คำสั่งการ:")}</strong>{" "}
                     {task.dispatch_note ||
                       task.description ||
-                      "โปรดเข้าตรวจสอบพื้นที่ในรัศมีเสาไมค์"}
+                      t("โปรดเข้าตรวจสอบพื้นที่ในรัศมีเสาไมค์")}
                   </p>
 
                   {/* 1-Tap Action Buttons */}
@@ -243,7 +237,7 @@ export default function FieldRangerHomePage() {
                         className="min-h-11 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1B4332] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#2D6A4F] active:scale-[0.99] transition"
                       >
                         <CheckCircle2 className="h-4 w-4 shrink-0" />
-                        <span>รับทราบงานทันที</span>
+                        <span>{t("รับทราบงานทันที")}</span>
                       </button>
                     )}
 
@@ -257,8 +251,8 @@ export default function FieldRangerHomePage() {
                     >
                       <span>
                         {task.status === "acknowledged"
-                          ? "ส่งผลการตรวจสอบพื้นที่ & แนบรูปถ่าย"
-                          : "ฟังเสียง & ดูรายละเอียดงาน"}
+                          ? t("ส่งผลการตรวจสอบพื้นที่ & แนบรูปถ่าย")
+                          : t("ฟังเสียง & ดูรายละเอียดงาน")}
                       </span>
                       <ArrowRight className="h-4 w-4 shrink-0" />
                     </Link>
@@ -274,19 +268,13 @@ export default function FieldRangerHomePage() {
           <section className="rounded-xl border border-[#D4DCD5] bg-white p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-[#14241B]">
-                  แผนที่เขตรับผิดชอบและเสาไมโครโฟน
-                </h2>
-                <p className="text-xs text-[#526358]">
-                  แสดงขอบเขตโซนป่าไม้และรัศมีรับเสียงเสาไมค์
-                </p>
+                <h2 className="text-base font-bold text-[#14241B]">{t("แผนที่เขตรับผิดชอบและเสาไมโครโฟน")}</h2>
+                <p className="text-xs text-[#526358]">{t("แสดงขอบเขตโซนป่าไม้และรัศมีรับเสียงเสาไมค์")}</p>
               </div>
               <Link
                 href="/field-map"
                 className="text-xs font-bold text-[#1B4332] hover:underline whitespace-nowrap"
-              >
-                ขยายเต็มจอ →
-              </Link>
+              >{t("ขยายเต็มจอ →")}</Link>
             </div>
 
             <RiskZoneMap
@@ -302,9 +290,7 @@ export default function FieldRangerHomePage() {
           <section className="rounded-xl border border-[#D4DCD5] bg-white p-4 space-y-2.5">
             <div className="flex items-center gap-1.5">
               <Trees className="h-4 w-4 text-[#1B4332]" />
-              <h3 className="text-sm font-bold text-[#14241B]">
-                สถานะโซนป่าไม้ในเขตรับผิดชอบ
-              </h3>
+              <h3 className="text-sm font-bold text-[#14241B]">{t("สถานะโซนป่าไม้ในเขตรับผิดชอบ")}</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2">
               {zones.map((z) => (

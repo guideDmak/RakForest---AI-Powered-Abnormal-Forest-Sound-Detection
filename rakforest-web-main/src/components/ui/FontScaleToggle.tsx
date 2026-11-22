@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useState } from "react";
 import { Type } from "lucide-react";
@@ -10,6 +11,7 @@ export default function FontScaleToggle({
 }: {
   variant?: "light" | "dark";
 }) {
+  const { t } = useLanguage();
   const [scale, setScale] = useState<"normal" | "large">("normal");
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export default function FontScaleToggle({
       <button
         type="button"
         onClick={toggleScale}
-        title="สลับขนาดตัวอักษรสำหรับผู้สูงอายุหรือใช้งานกลางแจ้ง"
+        title={t("สลับขนาดตัวอักษรสำหรับผู้สูงอายุหรือใช้งานกลางแจ้ง")}
         aria-pressed={isLarge}
         className={`inline-flex h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-bold whitespace-nowrap transition shrink-0 ${
           isLarge
@@ -58,7 +60,7 @@ export default function FontScaleToggle({
         }`}
       >
         <Type className="h-3.5 w-3.5 shrink-0" />
-        <span>{isLarge ? "ก+ ใหญ่" : "ก+"}</span>
+        <span>{isLarge ? t("ก+ ใหญ่") : t("ก+")}</span>
       </button>
     );
   }
@@ -67,7 +69,7 @@ export default function FontScaleToggle({
     <button
       type="button"
       onClick={toggleScale}
-      title="สลับขนาดตัวอักษรสำหรับผู้สูงอายุหรือใช้งานกลางแจ้ง"
+      title={t("สลับขนาดตัวอักษรสำหรับผู้สูงอายุหรือใช้งานกลางแจ้ง")}
       aria-pressed={isLarge}
       className={`inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition shrink-0 ${
         isLarge
@@ -77,9 +79,9 @@ export default function FontScaleToggle({
     >
       <Type className="h-4 w-4 shrink-0" />
       <span className="hidden sm:inline">
-        {isLarge ? "ก+ โหมดตัวหนังสือใหญ่" : "ก+ ขยายตัวหนังสือ"}
+        {isLarge ? t("ก+ โหมดตัวหนังสือใหญ่") : t("ก+ ขยายตัวหนังสือ")}
       </span>
-      <span className="sm:hidden">{isLarge ? "ก+ ใหญ่" : "ก+"}</span>
+      <span className="sm:hidden">{isLarge ? t("ก+ ใหญ่") : t("ก+")}</span>
     </button>
   );
 }

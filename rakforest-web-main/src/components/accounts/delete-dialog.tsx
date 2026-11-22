@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { rakforestRepo } from "@/lib/supabase/repository";
@@ -18,6 +19,7 @@ type DeleteProps = {
 };
 
 export default function DeleteDialog(props: DeleteProps) {
+  const { t } = useLanguage();
   return (
     <DeleteConfirmation
       {...props}
@@ -25,10 +27,10 @@ export default function DeleteDialog(props: DeleteProps) {
         <AccountDialog
           title={
             props.kind === "zone"
-              ? "ยืนยันการลบโซนป่า"
+              ? t("ยืนยันการลบโซนป่า")
               : props.kind === "profile"
-                ? "ลบเจ้าหน้าที่"
-                : "ลบไมค์"
+                ? t("ลบเจ้าหน้าที่")
+                : t("ลบไมค์")
           }
           busy={busy}
           onClose={props.onClose}
@@ -54,6 +56,7 @@ export function DeleteConfirmation({
   cancelLabel?: string;
   onBusyChange?: (busy: boolean) => void;
 }) {
+  const { t } = useLanguage();
   const [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -108,11 +111,10 @@ export function DeleteConfirmation({
   return render(
     <form onSubmit={submit} className="space-y-4">
       <p>
-        ต้องการลบ <strong>{name}</strong> ออกจากรายการใช้งานหรือไม่?
-        ประวัติรายงานเดิมยังคงอยู่
+        {t("ต้องการลบ ")}<strong>{name}</strong>{t(" ออกจากรายการใช้งานหรือไม่? ประวัติรายงานเดิมยังคงอยู่")}
       </p>
       <label className="block text-sm font-semibold">
-        รหัสผ่านของคุณ
+        {t("รหัสผ่านของคุณ")}
         <input
           className={control + " mt-1"}
           type="password"
@@ -125,7 +127,7 @@ export function DeleteConfirmation({
       </label>
       {error && (
         <p role="alert" className="text-sm text-red-800">
-          {error}
+          {t(error)}
         </p>
       )}
       {blockers.length > 0 && (
@@ -137,10 +139,10 @@ export function DeleteConfirmation({
                 href={item.kind === "report" ? "/reports/" + item.id : "/zones"}
               >
                 {item.kind === "report"
-                  ? "งาน"
+                  ? t("งาน")
                   : item.kind === "station"
-                    ? "ไมค์"
-                    : "โซน"}
+                    ? t("ไมค์")
+                    : t("โซน")}
                 : {item.name}
               </Link>
             </li>
@@ -154,13 +156,13 @@ export function DeleteConfirmation({
           disabled={busy}
           onClick={onClose}
         >
-          {cancelLabel}
+          {t(cancelLabel)}
         </button>
         <button
           className={primary + " bg-red-800"}
           disabled={busy || !password}
         >
-          {busy ? "กำลังยืนยัน…" : "ยืนยันลบ"}
+          {busy ? t("กำลังยืนยัน…") : t("ยืนยันลบ")}
         </button>
       </div>
     </form>,

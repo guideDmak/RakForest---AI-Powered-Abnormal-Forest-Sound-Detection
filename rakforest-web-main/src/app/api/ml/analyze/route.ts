@@ -22,6 +22,6 @@ export async function POST(request: Request) {
     } catch (e) { if (e instanceof ModelError) throw e; throw new ModelError("INVALID_AUDIO", (e as Error).message, 400); }
   } catch (e) {
     const error = e instanceof ModelError ? e : new ModelError("INTERNAL_ERROR", "บริการวิเคราะห์เกิดข้อผิดพลาด", 500);
-    return Response.json({ requestId, error: { code: error.code, message: error.message } }, { status: error.status });
+    return Response.json({ requestId, error: { code: error.code, message: error.message } }, { status: error.status, headers: error.status === 413 ? { Connection: "close" } : undefined });
   }
 }

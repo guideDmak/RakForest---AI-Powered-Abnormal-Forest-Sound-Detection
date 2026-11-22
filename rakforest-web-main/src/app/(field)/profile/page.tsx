@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import { ROLE_LABELS_TH } from "@/lib/utils/risk";
 import type { ForestZone, Profile } from "@/types/database.types";
 
 export default function FieldRangerProfilePage() {
+  const { t } = useLanguage();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [zones, setZones] = useState<ForestZone[]>([]);
@@ -29,9 +31,7 @@ export default function FieldRangerProfilePage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">
-        ข้อมูลประจำตัวเจ้าหน้าที่และการแจ้งเตือน
-      </h1>
+      <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">{t("ข้อมูลประจำตัวเจ้าหน้าที่และการแจ้งเตือน")}</h1>
 
       <section className="rounded-lg border border-[#D4DCD5] bg-white p-5 sm:p-6 space-y-4">
         <div className="flex items-center gap-4 border-b border-[#E4ECE6] pb-4">
@@ -43,7 +43,7 @@ export default function FieldRangerProfilePage() {
               {profile?.employee_code ?? "RF-RNG-108"}
             </span>
             <h2 className="text-lg font-bold text-[#14241B]">
-              {profile?.full_name ?? "สมชาย ใจดี"}
+              {profile?.full_name ?? t("สมชาย ใจดี")}
             </h2>
             <p className="text-xs text-[#526358]">
               {profile?.position} • {profile?.department}
@@ -53,26 +53,24 @@ export default function FieldRangerProfilePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
-            <span className="text-[#526358] block">บทบาทสิทธิ์การใช้งาน</span>
+            <span className="text-[#526358] block">{t("บทบาทสิทธิ์การใช้งาน")}</span>
             <strong className="text-[#14241B] text-sm">
-              {profile ? ROLE_LABELS_TH[profile.role] : "เจ้าหน้าที่ภาคสนาม"}
+              {profile ? t(ROLE_LABELS_TH[profile.role]) : t("เจ้าหน้าที่ภาคสนาม")}
             </strong>
           </div>
           <div>
-            <span className="text-[#526358] block">สถานะการยืนยันตัวตน</span>
+            <span className="text-[#526358] block">{t("สถานะการยืนยันตัวตน")}</span>
             <span className="inline-flex items-center gap-1 text-emerald-800 font-bold text-sm">
-              <ShieldCheck className="h-4 w-4" />
-              ยืนยันตัวตนและอนุมัติแล้ว
-            </span>
+              <ShieldCheck className="h-4 w-4" />{t("ยืนยันตัวตนและอนุมัติแล้ว")}</span>
           </div>
           <div>
-            <span className="text-[#526358] block">อีเมลหน่วยงาน</span>
+            <span className="text-[#526358] block">{t("อีเมลหน่วยงาน")}</span>
             <strong className="font-mono-code text-[#14241B]">
               {profile?.email ?? "ranger@rakforest.go.th"}
             </strong>
           </div>
           <div>
-            <span className="text-[#526358] block">การเชื่อมต่อ Telegram แจ้งเตือน</span>
+            <span className="text-[#526358] block">{t("การเชื่อมต่อ Telegram แจ้งเตือน")}</span>
             <span className="inline-flex items-center gap-1 font-mono-code font-bold text-[#1B4332]">
               <Send className="h-3.5 w-3.5" />
               Chat ID: {profile?.telegram_chat_id || "1750820064"}
@@ -81,9 +79,7 @@ export default function FieldRangerProfilePage() {
         </div>
 
         <div className="pt-3 border-t border-[#E4ECE6]">
-          <p className="text-xs font-bold text-[#14241B] mb-2">
-            โซนป่าอนุรักษ์ในความรับผิดชอบ:
-          </p>
+          <p className="text-xs font-bold text-[#14241B] mb-2">{t("โซนป่าอนุรักษ์ในความรับผิดชอบ:")}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {zones.slice(0, 2).map((z) => (
               <div
@@ -106,7 +102,7 @@ export default function FieldRangerProfilePage() {
             className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-xs font-bold text-[#D62828] hover:bg-red-100"
           >
             <LogOut className="h-4 w-4" />
-            <span>ออกจากระบบ</span>
+            <span>{t("ออกจากระบบ")}</span>
           </button>
         </div>
       </section>

@@ -56,7 +56,7 @@ test("server requires origin, administrator and own password before calling serv
   const request = (password: string, origin = "http://localhost:3000") =>
     new Request("http://localhost:3000/api/directory/delete", {
       method: "POST",
-      headers: { origin, "Content-Type": "application/json" },
+      headers: { origin, host: "localhost:3000", "Content-Type": "application/json" },
       body: JSON.stringify({
         kind: "profile",
         actorId: admin.id,

@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -63,6 +64,7 @@ const blankStation = {
   notes: "",
 };
 export default function ZonesPage() {
+  const { t } = useLanguage();
   const [zones, setZones] = useState<ForestZone[]>([]),
     [stations, setStations] = useState<SensorStation[]>([]),
     [profiles, setProfiles] = useState<Profile[]>([]);
@@ -294,51 +296,44 @@ export default function ZonesPage() {
     <div className="space-y-4 text-[#14241B]">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">จัดการโซนป่าและเสาไมค์</h1>
-          <p className="mt-1 text-sm text-[#526358]">
-            กำหนดขอบเขตพื้นที่ และจัดการจุดติดตั้งไมค์
-          </p>
+          <h1 className="text-2xl font-bold">{t("จัดการโซนป่าและเสาไมค์")}</h1>
+          <p className="mt-1 text-sm text-[#526358]">{t("กำหนดขอบเขตพื้นที่ และจัดการจุดติดตั้งไมค์")}</p>
         </div>
-        <nav aria-label="โหมดแผนที่" className="flex flex-wrap gap-2">
+        <nav aria-label={t("โหมดแผนที่")} className="flex flex-wrap gap-2">
           {mode !== "view" && (
             <button
               className={secondary + " gap-2"}
               disabled={busy}
               onClick={cancel}
             >
-              <MapIcon size={16} aria-hidden="true" /> ดูแผนที่
-            </button>
+              <MapIcon size={16} aria-hidden="true" />{t(" ดูแผนที่")}</button>
           )}
           <button
             className={(mode === "station" ? secondary : primary) + " gap-2"}
             disabled={busy || loading}
             onClick={() => startZone()}
           >
-            <Trees size={16} aria-hidden="true" /> วาดโซนใหม่
-          </button>
+            <Trees size={16} aria-hidden="true" />{t(" วาดโซนใหม่")}</button>
           <button
             className={(mode === "station" ? primary : secondary) + " gap-2"}
             disabled={busy || loading}
             onClick={() => startStation()}
           >
-            <Radio size={16} aria-hidden="true" /> เพิ่มไมค์
-          </button>
+            <Radio size={16} aria-hidden="true" />{t(" เพิ่มไมค์")}</button>
         </nav>
       </header>
       {feedback && (
         <p role="status" className="rounded-lg bg-emerald-50 p-3">
-          {feedback}
+          {t(feedback)}
         </p>
       )}
       {loadError && (
         <div role="alert" className="rounded-lg bg-red-50 p-3">
-          <p>{loadError}</p>
-          <button className={secondary} onClick={() => void load()}>
-            ลองโหลดใหม่
-          </button>
+          <p>{t(loadError)}</p>
+          <button className={secondary} onClick={() => void load()}>{t("ลองโหลดใหม่")}</button>
         </div>
       )}
-      {loading && <p role="status">กำลังโหลดข้อมูล…</p>}
+      {loading && <p role="status">{t("กำลังโหลดข้อมูล…")}</p>}
       <div
         className={
           mode === "view"
@@ -349,7 +344,7 @@ export default function ZonesPage() {
         <section
           ref={mapSection}
           tabIndex={-1}
-          aria-label="แผนที่โซนและเสาไมค์"
+          aria-label={t("แผนที่โซนและเสาไมค์")}
           className="min-w-0 scroll-mt-20 space-y-2"
         >
           {mode !== "view" && (
@@ -358,15 +353,14 @@ export default function ZonesPage() {
               className={secondary + " gap-2 lg:hidden"}
               onClick={() => jumpTo(formSection.current)}
             >
-              <ArrowDown size={16} aria-hidden="true" /> ไปที่ฟอร์ม
-            </button>
+              <ArrowDown size={16} aria-hidden="true" />{t(" ไปที่ฟอร์ม")}</button>
           )}
           {mode === "polygon" && (
             <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
               <p className="text-sm">
                 {finished
-                  ? "วาดเสร็จแล้ว ตรวจข้อมูลก่อนบันทึก หรือลากจุดเพื่อแก้ไข"
-                  : "แตะแผนที่เพิ่มจุด ลากหมุดเพื่อแก้ตำแหน่ง หรือเลือกจุดแล้วกดลบ"}
+                  ? t("วาดเสร็จแล้ว ตรวจข้อมูลก่อนบันทึก หรือลากจุดเพื่อแก้ไข")
+                  : t("แตะแผนที่เพิ่มจุด ลากหมุดเพื่อแก้ตำแหน่ง หรือเลือกจุดแล้วกดลบ")}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button
@@ -376,9 +370,7 @@ export default function ZonesPage() {
                     changePoints(points.slice(0, -1));
                     setSelectedPoint(null);
                   }}
-                >
-                  ย้อนจุด
-                </button>
+                >{t("ย้อนจุด")}</button>
                 <button
                   className={secondary}
                   disabled={busy || !points.length}
@@ -386,9 +378,7 @@ export default function ZonesPage() {
                     changePoints([]);
                     setSelectedPoint(null);
                   }}
-                >
-                  ล้างทั้งหมด
-                </button>
+                >{t("ล้างทั้งหมด")}</button>
                 <button
                   className={secondary}
                   disabled={busy || selectedPoint === null}
@@ -396,9 +386,7 @@ export default function ZonesPage() {
                     changePoints(points.filter((_, i) => i !== selectedPoint));
                     setSelectedPoint(null);
                   }}
-                >
-                  ลบจุดที่เลือก
-                </button>
+                >{t("ลบจุดที่เลือก")}</button>
                 <button
                   className={primary}
                   disabled={busy || !!geometryError}
@@ -407,20 +395,16 @@ export default function ZonesPage() {
                     setError("");
                     focusEditor("form");
                   }}
-                >
-                  จบการวาด
-                </button>
+                >{t("จบการวาด")}</button>
               </div>
               <p className="text-sm" role="status">
-                {points.length} จุด ·{" "}
-                {geometryError || `พื้นที่ ${area?.toLocaleString()} ไร่`}
+                {points.length}{t(" จุด ·")}{" "}
+                {t(geometryError) || (t("พื้นที่ ") + area?.toLocaleString() + t(" ไร่"))}
               </p>
             </div>
           )}
           {mode === "station" && (
-            <p className="rounded-lg bg-amber-50 p-3 text-sm">
-              แตะแผนที่เพื่อวางไมค์ หรือกรอกพิกัดในฟอร์ม
-            </p>
+            <p className="rounded-lg bg-amber-50 p-3 text-sm">{t("แตะแผนที่เพื่อวางไมค์ หรือกรอกพิกัดในฟอร์ม")}</p>
           )}
           <RiskZoneMap
             zones={zones}
@@ -482,9 +466,7 @@ export default function ZonesPage() {
           />
           {mode === "polygon" && points.length > 0 && (
             <details className={panel}>
-              <summary className="cursor-pointer">
-                แก้พิกัดจุดด้วยตัวเลข ({points.length} จุด)
-              </summary>
+              <summary className="cursor-pointer">{t("แก้พิกัดจุดด้วยตัวเลข (")}{points.length}{t(" จุด)")}</summary>
               <div className="max-h-72 space-y-2 overflow-y-auto">
                 {points.map((p, i) => (
                   <div
@@ -495,13 +477,10 @@ export default function ZonesPage() {
                       className={secondary}
                       aria-pressed={selectedPoint === i}
                       onClick={() => setSelectedPoint(i)}
-                    >
-                      จุด {i + 1}
+                    >{t("จุด ")}{i + 1}
                     </button>
-                    <label className="text-xs">
-                      ลองจิจูด
-                      <input
-                        aria-label={`ลองจิจูดจุด ${i + 1}`}
+                    <label className="text-xs">{t("ลองจิจูด")}<input
+                        aria-label={(t("ลองจิจูดจุด ") + (i + 1))}
                         type="number"
                         step="any"
                         className={control}
@@ -515,10 +494,8 @@ export default function ZonesPage() {
                         }
                       />
                     </label>
-                    <label className="text-xs">
-                      ละติจูด
-                      <input
-                        aria-label={`ละติจูดจุด ${i + 1}`}
+                    <label className="text-xs">{t("ละติจูด")}<input
+                        aria-label={(t("ละติจูดจุด ") + (i + 1))}
                         type="number"
                         step="any"
                         className={control}
@@ -542,7 +519,7 @@ export default function ZonesPage() {
           <section
             ref={formSection}
             tabIndex={-1}
-            aria-label="ฟอร์มจัดการโซนและเสาไมค์"
+            aria-label={t("ฟอร์มจัดการโซนและเสาไมค์")}
             className="min-w-0 scroll-mt-20 space-y-3"
           >
             <button
@@ -550,17 +527,16 @@ export default function ZonesPage() {
               className={secondary + " gap-2 lg:hidden"}
               onClick={() => jumpTo(mapSection.current)}
             >
-              <ArrowUp size={16} aria-hidden="true" /> กลับไปที่แผนที่
-            </button>
+              <ArrowUp size={16} aria-hidden="true" />{t(" กลับไปที่แผนที่")}</button>
             {error && (
               <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">
-                {error}
+                {t(error)}
               </p>
             )}
             {mode === "polygon" ? (
               <form onSubmit={saveZone} className={panel}>
                 <h2 className="text-lg font-bold">
-                  {editingZone ? "แก้ไขขอบเขตโซน" : "เพิ่มโซนป่า"}
+                  {editingZone ? t("แก้ไขขอบเขตโซน") : t("เพิ่มโซนป่า")}
                 </h2>
                 <fieldset
                   disabled={busy}
@@ -575,7 +551,7 @@ export default function ZonesPage() {
                     ] as const
                   ).map((f) => (
                     <label key={f.key} className="block text-sm font-semibold">
-                      {f.label}
+                      {t(f.label)}
                       <input
                         className={control + " mt-1"}
                         value={zone[f.key]}
@@ -586,30 +562,26 @@ export default function ZonesPage() {
                       />
                     </label>
                   ))}
-                  <label className="block text-sm font-semibold">
-                    ความเสี่ยง
-                    <select
+                  <label className="block text-sm font-semibold">{t("ความเสี่ยง")}<select
                       className={control}
                       value={zone.risk}
                       onChange={(e) =>
                         setZone({ ...zone, risk: e.target.value as RiskLevel })
                       }
                     >
-                      <option value="green">ปกติ</option>
-                      <option value="yellow">เฝ้าระวัง</option>
-                      <option value="red">เสี่ยงสูง</option>
+                      <option value="green">{t("ปกติ")}</option>
+                      <option value="yellow">{t("เฝ้าระวัง")}</option>
+                      <option value="red">{t("เสี่ยงสูง")}</option>
                     </select>
                   </label>
-                  <label className="block text-sm font-semibold">
-                    ผู้รับผิดชอบ
-                    <select
+                  <label className="block text-sm font-semibold">{t("ผู้รับผิดชอบ")}<select
                       className={control}
                       value={zone.officer}
                       onChange={(e) =>
                         setZone({ ...zone, officer: e.target.value })
                       }
                     >
-                      <option value="">ยังไม่กำหนด</option>
+                      <option value="">{t("ยังไม่กำหนด")}</option>
                       {profiles.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.full_name}
@@ -617,9 +589,7 @@ export default function ZonesPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="block text-sm font-semibold sm:col-span-2">
-                    รายละเอียด
-                    <textarea
+                  <label className="block text-sm font-semibold sm:col-span-2">{t("รายละเอียด")}<textarea
                       className={control}
                       value={zone.description}
                       onChange={(e) =>
@@ -629,7 +599,7 @@ export default function ZonesPage() {
                   </label>
                   {outside.length > 0 && (
                     <div className="rounded-lg bg-amber-50 p-3 text-sm sm:col-span-2">
-                      <p>ไมค์ที่สังกัดอยู่นอกขอบเขตใหม่:</p>
+                      <p>{t("ไมค์ที่สังกัดอยู่นอกขอบเขตใหม่:")}</p>
                       <ul>
                         {outside.map((s) => (
                           <li key={s.id}>
@@ -642,9 +612,7 @@ export default function ZonesPage() {
                           type="checkbox"
                           checked={acceptOutside}
                           onChange={(e) => setAcceptOutside(e.target.checked)}
-                        />
-                        ยืนยันขอบเขตนี้และคงสังกัดไมค์เดิม
-                      </label>
+                        />{t("ยืนยันขอบเขตนี้และคงสังกัดไมค์เดิม")}</label>
                     </div>
                   )}
                   <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
@@ -652,9 +620,7 @@ export default function ZonesPage() {
                       type="button"
                       className={secondary}
                       onClick={cancel}
-                    >
-                      ยกเลิก
-                    </button>
+                    >{t("ยกเลิก")}</button>
                     <button
                       className={primary}
                       disabled={
@@ -662,16 +628,14 @@ export default function ZonesPage() {
                         !!geometryError ||
                         (outside.length > 0 && !acceptOutside)
                       }
-                    >
-                      บันทึกขอบเขต
-                    </button>
+                    >{t("บันทึกขอบเขต")}</button>
                   </div>
                 </fieldset>
               </form>
             ) : mode === "station" ? (
               <form onSubmit={saveStation} className={panel}>
                 <h2 className="text-lg font-bold">
-                  {editingStation ? "แก้ไขไมค์" : "เพิ่มไมค์"}
+                  {editingStation ? t("แก้ไขไมค์") : t("เพิ่มไมค์")}
                 </h2>
                 <fieldset
                   disabled={busy}
@@ -684,7 +648,7 @@ export default function ZonesPage() {
                     ] as const
                   ).map((f) => (
                     <label key={f.key} className="block text-sm font-semibold">
-                      {f.label}
+                      {t(f.label)}
                       <input
                         className={control}
                         value={station[f.key]}
@@ -695,16 +659,14 @@ export default function ZonesPage() {
                       />
                     </label>
                   ))}
-                  <label className="block text-sm font-semibold">
-                    สังกัดโซนป่าไม้
-                    <select
+                  <label className="block text-sm font-semibold">{t("สังกัดโซนป่าไม้")}<select
                       className={control}
                       value={station.zone}
                       onChange={(e) =>
                         setStation({ ...station, zone: e.target.value })
                       }
                     >
-                      <option value="">ไม่สังกัดโซน</option>
+                      <option value="">{t("ไม่สังกัดโซน")}</option>
                       {zones.map((z) => (
                         <option key={z.id} value={z.id}>
                           {z.name}
@@ -724,7 +686,7 @@ export default function ZonesPage() {
                         key={f.key}
                         className="block text-sm font-semibold"
                       >
-                        {f.label}
+                        {t(f.label)}
                         <input
                           className={control}
                           type="number"
@@ -738,9 +700,7 @@ export default function ZonesPage() {
                       </label>
                     ))}
                   </div>
-                  <label className="block text-sm font-semibold">
-                    สถานะ
-                    <select
+                  <label className="block text-sm font-semibold">{t("สถานะ")}<select
                       className={control}
                       value={station.status}
                       onChange={(e) =>
@@ -750,14 +710,12 @@ export default function ZonesPage() {
                         })
                       }
                     >
-                      <option value="online">ออนไลน์</option>
-                      <option value="offline">ออฟไลน์</option>
-                      <option value="maintenance">ซ่อมบำรุง</option>
+                      <option value="online">{t("ออนไลน์")}</option>
+                      <option value="offline">{t("ออฟไลน์")}</option>
+                      <option value="maintenance">{t("ซ่อมบำรุง")}</option>
                     </select>
                   </label>
-                  <label className="block text-sm font-semibold sm:col-span-2">
-                    หมายเหตุ
-                    <textarea
+                  <label className="block text-sm font-semibold sm:col-span-2">{t("หมายเหตุ")}<textarea
                       className={control}
                       value={station.notes}
                       onChange={(e) =>
@@ -770,10 +728,8 @@ export default function ZonesPage() {
                       type="button"
                       className={secondary}
                       onClick={cancel}
-                    >
-                      ยกเลิก
-                    </button>
-                    <button className={primary}>บันทึกไมค์</button>
+                    >{t("ยกเลิก")}</button>
+                    <button className={primary}>{t("บันทึกไมค์")}</button>
                   </div>
                 </fieldset>
               </form>
@@ -782,10 +738,10 @@ export default function ZonesPage() {
         )}
       </div>
       {mode === "view" && (
-        <section aria-label="รายการโซนและเสาไมค์" className="space-y-2">
+        <section aria-label={t("รายการโซนและเสาไมค์")} className="space-y-2">
           <div
             role="tablist"
-            aria-label="ประเภทรายการ"
+            aria-label={t("ประเภทรายการ")}
             className="flex flex-wrap gap-2"
           >
             {directoryTabs.map((item) => {
@@ -821,8 +777,8 @@ export default function ZonesPage() {
                   }}
                 >
                   {item === "zones"
-                    ? `โซนป่า (${zones.length})`
-                    : `เสาไมค์ (${stations.length})`}
+                    ? (t("โซนป่า (") + zones.length + ")")
+                    : (t("เสาไมค์ (") + stations.length + ")")}
                 </button>
               );
             })}
@@ -841,9 +797,9 @@ export default function ZonesPage() {
                   <input
                     type="search"
                     className={control + " sm:max-w-sm"}
-                    aria-label={item === "zones" ? "ค้นหาโซนป่า" : "ค้นหาเสาไมค์"}
+                    aria-label={item === "zones" ? t("ค้นหาโซนป่า") : t("ค้นหาเสาไมค์")}
                     placeholder={
-                      item === "zones" ? "ค้นหาชื่อหรือรหัสโซน" : "ค้นหาชื่อหรือรหัสไมค์"
+                      item === "zones" ? t("ค้นหาชื่อหรือรหัสโซน") : t("ค้นหาชื่อหรือรหัสไมค์")
                     }
                     value={queries[item]}
                     onChange={(e) =>
@@ -856,10 +812,10 @@ export default function ZonesPage() {
                     !visibleStations.length && (
                       <p className="rounded-lg border border-[#D4DCD5] bg-white p-3 text-sm text-[#526358]">
                         {query
-                          ? "ไม่พบรายการที่ตรงกับการค้นหา"
+                          ? t("ไม่พบรายการที่ตรงกับการค้นหา")
                           : item === "zones"
-                            ? "ยังไม่มีโซนป่า"
-                            : "ยังไม่มีเสาไมค์"}
+                            ? t("ยังไม่มีโซนป่า")
+                            : t("ยังไม่มีเสาไมค์")}
                       </p>
                     )}
                   <div className="grid gap-2 xl:grid-cols-2">
@@ -873,29 +829,21 @@ export default function ZonesPage() {
                             <RiskBadge size="xs" level={z.current_risk_level} />
                           </div>
                           <p className="mt-1 text-xs text-[#526358]">
-                            {z.zone_code} · {z.area_rai?.toLocaleString()} ไร่ ·{" "}
-                            {stations.filter((s) => s.zone_id === z.id).length}{" "}
-                            ไมค์
-                          </p>
+                            {z.zone_code} · {z.area_rai?.toLocaleString()}{t(" ไร่ ·")}{" "}
+                            {stations.filter((s) => s.zone_id === z.id).length}{" "}{t("ไมค์")}</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
                             className={secondary}
                             onClick={() => startZone(z)}
-                          >
-                            แก้ไขขอบเขต
-                          </button>
-                          <Link className={secondary} href={"/zones/" + z.id}>
-                            รายละเอียดโซน
-                          </Link>
+                          >{t("แก้ไขขอบเขต")}</button>
+                          <Link className={secondary} href={"/zones/" + z.id}>{t("รายละเอียดโซน")}</Link>
                           {admin && (
                             <button
                               type="button"
                               className={secondary + " text-red-800"}
                               onClick={() => setDeletingZone(z)}
-                            >
-                              ลบโซน
-                            </button>
+                            >{t("ลบโซน")}</button>
                           )}
                         </div>
                       </article>
@@ -913,23 +861,19 @@ export default function ZonesPage() {
                               aria-hidden="true"
                             />
                             {zones.find((z) => z.id === s.zone_id)?.name ||
-                              "ไม่สังกัดโซน"}
+                              t("ไม่สังกัดโซน")}
                           </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button
                             className={secondary}
                             onClick={() => startStation(s)}
-                          >
-                            แก้ไขไมค์
-                          </button>
+                          >{t("แก้ไขไมค์")}</button>
                           {admin && (
                             <button
                               className={secondary + " text-red-800"}
                               onClick={() => setDeleting(s)}
-                            >
-                              ลบไมค์
-                            </button>
+                            >{t("ลบไมค์")}</button>
                           )}
                         </div>
                       </article>

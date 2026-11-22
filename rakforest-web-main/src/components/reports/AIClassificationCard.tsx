@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useMemo } from "react";
 import {
@@ -39,6 +40,7 @@ export default function AIClassificationCard({
   modelVersion = "rakforest-audiocnn-multilabel-v1",
   rawResponse,
 }: Props) {
+  const { t } = useLanguage();
   const scoresMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const item of rawResponse?.scores ?? []) {
@@ -137,12 +139,12 @@ export default function AIClassificationCard({
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold text-[#526358]">
             <Cpu className="h-4 w-4 text-[#1B4332]" />
-            <span>เสียงที่ตรวจพบชัดเจนที่สุดและมีความเสี่ยงสูงสุด</span>
+            <span>{t("เสียงที่ตรวจพบชัดเจนที่สุดและมีความเสี่ยงสูงสุด")}</span>
           </div>
           <h3
             className={`mt-1 text-xl sm:text-2xl font-extrabold tracking-tight ${topColorClasses.text}`}
           >
-            {getClassNameTh(predictedLabel)}
+            {t(getClassNameTh(predictedLabel))}
           </h3>
         </div>
 
@@ -160,14 +162,14 @@ export default function AIClassificationCard({
       <div className="flex items-start gap-2.5 rounded-lg border border-[#D4DCD5] bg-[#F7F9F7] px-3.5 py-2.5 text-xs text-[#435449]">
         <ShieldAlert className="h-4 w-4 shrink-0 text-[#1B4332] mt-0.5" />
         <span>
-          ระบบ AI <strong>AudioCNN</strong> แยกแยะเสียงหลายประเภทพร้อมกัน โดยจัดลำดับเสียงที่เป็นอันตรายต่อป่าไม้ขึ้นมาแสดงก่อนเสมอ แม้จะมีเสียงธรรมชาติปะปนอยู่ในไฟล์เสียง
+          {t("ระบบ AI ")}<strong>AudioCNN</strong>{t(" แยกแยะเสียงหลายประเภทพร้อมกัน โดยจัดลำดับเสียงที่เป็นอันตรายต่อป่าไม้ขึ้นมาแสดงก่อนเสมอ แม้จะมีเสียงธรรมชาติปะปนอยู่ในไฟล์เสียง")}
         </span>
       </div>
 
       {/* Grouping Sections (Red -> Yellow -> Green) stacked vertically */}
       <div className="space-y-4 pt-1">
         <div className="flex items-center justify-between text-xs font-semibold text-[#526358] px-1">
-          <span>การจัดกลุ่มความเสี่ยงของเสียง (เกณฑ์ตัดสินผ่าน ≥{Math.round(threshold * 100)}%)</span>
+          <span>{t("การจัดกลุ่มความเสี่ยงของเสียง (เกณฑ์ตัดสินผ่าน ≥")}{Math.round(threshold * 100)}%)</span>
           <span className="font-mono-code">{modelVersion}</span>
         </div>
 
@@ -185,11 +187,11 @@ export default function AIClassificationCard({
                 <div className="flex items-center gap-2 min-w-0">
                   <GroupIcon className={`h-4 w-4 shrink-0 ${group.iconColor}`} />
                   <span className="font-bold text-xs sm:text-sm truncate">
-                    {group.title}
+                    {t(group.title)}
                   </span>
                 </div>
                 <span className="hidden sm:inline text-[11px] font-medium opacity-80">
-                  {group.subtitle}
+                  {t(group.subtitle)}
                 </span>
               </div>
 
@@ -220,18 +222,18 @@ export default function AIClassificationCard({
                                   : "text-[#526358]"
                             }`}
                           >
-                            {item.label}
+                            {t(item.label)}
                           </span>
                           {isTopPredicted && (
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${topColorClasses.badgeBg}`}
                             >
-                              ★ ค่าสูงสุด
+                              {t("★ ค่าสูงสุด")}
                             </span>
                           )}
                           {passed && !isTopPredicted && (
                             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-[#1B4332]">
-                              ผ่านเกณฑ์
+                              {t("ผ่านเกณฑ์")}
                             </span>
                           )}
                         </div>

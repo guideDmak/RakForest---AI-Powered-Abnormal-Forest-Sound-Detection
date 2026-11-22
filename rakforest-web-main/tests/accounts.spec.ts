@@ -61,6 +61,7 @@ test("three-step registration persists pending role without OTP and survives rel
   expect(db.profiles[0].verification_status).toBe("pending");
   expect(db.profiles[0].otp_code).toBeNull();
   await page.getByRole("link", { name: "อนุมัติภายหลัง" }).click();
+  await expect(page).toHaveURL(/\/accounts$/);
   await page.reload();
   const row = page.getByRole("listitem").filter({ hasText: "เจ้าหน้าที่ทดสอบ" });
   await row.getByRole("button", { name: "ตั้งค่าบัญชี" }).click();

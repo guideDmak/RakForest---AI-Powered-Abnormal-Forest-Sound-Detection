@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -32,6 +33,7 @@ export default function BackofficeReportDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { t, language } = useLanguage();
   const { id } = use(params);
   const [report, setReport] = useState<ReportRecord | null>(null);
   const [rangers, setRangers] = useState<Profile[]>([]);
@@ -75,7 +77,7 @@ export default function BackofficeReportDetailPage({
   if (!report) {
     return (
       <div className="rounded-lg border border-[#D4DCD5] bg-white p-8 text-center">
-        <p className="text-sm text-[#526358]">กำลังโหลดข้อมูลรายงาน…</p>
+        <p className="text-sm text-[#526358]">{t("กำลังโหลดข้อมูลรายงาน…")}</p>
       </div>
     );
   }
@@ -123,13 +125,7 @@ export default function BackofficeReportDetailPage({
       });
       setReport(updated);
       setPendingDecision(null);
-      const labelTh =
-        newStatus === "confirmed"
-          ? "ยืนยันเหตุจริง"
-          : newStatus === "rejected"
-            ? "ปฏิเสธ (เสียงรบกวน)"
-            : "ตรวจแล้ว & ปิดงาน";
-      setFeedback(`บันทึกผลการพิจารณา "${labelTh}" เรียบร้อยแล้ว`);
+      setFeedback(newStatus === "confirmed" ? "บันทึกผลยืนยันเหตุจริงแล้ว" : newStatus === "rejected" ? "บันทึกผลปฏิเสธรายงานแล้ว" : "ปิดงานแล้ว");
     } finally {
       setBusy(false);
     }
@@ -145,7 +141,7 @@ export default function BackofficeReportDetailPage({
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B4332] hover:underline"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>กลับหน้ารายการรายงาน</span>
+            <span>{t("กลับหน้ารายการรายงาน")}</span>
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-2.5">
             <h1 className="font-mono-code text-xl sm:text-2xl font-bold text-[#14241B]">
@@ -163,25 +159,22 @@ export default function BackofficeReportDetailPage({
                       : "bg-emerald-50 text-[#2D8A3E] border-emerald-200"
                 }`}
               >
-                <span>{getClassNameTh(ai.predicted_label)}</span>
+                <span>{t(getClassNameTh(ai.predicted_label))}</span>
                 <span className="font-mono-code font-extrabold text-sm">
                   {Math.round(ai.confidence * 100)}%
                 </span>
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-[#526358]">
-            ตรวจพบเมื่อ{" "}
-            {new Date(report.created_at).toLocaleString("th-TH", {
+          <p className="mt-1 text-xs text-[#526358]">{t("ตรวจพบเมื่อ")}{" "}
+            {new Date(report.created_at).toLocaleString(language === "en" ? "en-GB" : "th-TH", {
               dateStyle: "long",
               timeStyle: "medium",
             })}{" "}
             •{" "}
             {report.source_type === "station_sensor"
-              ? `สัญญาณจากเสาไมค์ ${
-                  report.sensor_stations?.station_code ?? "ST-01"
-                } (${report.sensor_stations?.name ?? ""})`
-              : "รายงานสดจากชุดลาดตระเวนภาคสนาม"}
+              ? (t("สัญญาณจากเสาไมค์ ") + (report.sensor_stations?.station_code ?? "ST-01") + " (" + (report.sensor_stations?.name ?? "") + ")")
+              : t("รายงานสดจากชุดลาดตระเวนภาคสนาม")}
           </p>
         </div>
       </div>
@@ -192,7 +185,7 @@ export default function BackofficeReportDetailPage({
           className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900"
         >
           <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
-          <span>{feedback}</span>
+          <span>{t(feedback)}</span>
         </div>
       )}
 
@@ -202,9 +195,7 @@ export default function BackofficeReportDetailPage({
         <div className="lg:col-span-7 space-y-5">
           {/* Interactive Audio Waveform & Segment Time Jump */}
           <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 sm:p-5 space-y-3">
-            <h2 className="text-base font-bold text-[#14241B]">
-              1. ตรวจสอบหลักฐานเสียงและช่วงเวลาที่ตรวจพบ (Interactive Audio Timeline)
-            </h2>
+            <h2 className="text-base font-bold text-[#14241B]">{t("1. ตรวจสอบหลักฐานเสียงและช่วงเวลาที่ตรวจพบ (Interactive Audio Timeline)")}</h2>
             <AudioWaveformPlayer
               fileUrl={audio?.file_url}
               fileName={audio?.file_name}
@@ -229,20 +220,17 @@ export default function BackofficeReportDetailPage({
           <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 sm:p-5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-base font-bold text-[#14241B]">
-                  ตำแหน่งพิกัดเกิดเหตุและวงรัศมีรับเสียงเสาไมค์
-                </h2>
+                <h2 className="text-base font-bold text-[#14241B]">{t("ตำแหน่งพิกัดเกิดเหตุและวงรัศมีรับเสียงเสาไมค์")}</h2>
                 <p className="font-mono-code text-xs text-[#526358]">
-                  GPS: {report.lat.toFixed(5)}, {report.lng.toFixed(5)} • โซน:{" "}
-                  {report.forest_zones?.name ?? "เขตอนุรักษ์ป่าแม่ริม"}
+                  GPS: {report.lat.toFixed(5)}, {report.lng.toFixed(5)}{t(" • โซน:")}{" "}
+                  {report.forest_zones?.name ?? t("เขตอนุรักษ์ป่าแม่ริม")}
                 </p>
               </div>
               {report.sensor_stations && (
                 <span className="inline-flex items-center gap-1 rounded bg-[#EBF2ED] px-2.5 py-1 font-mono-code text-xs font-bold text-[#1B4332]">
                   <Radio className="h-3.5 w-3.5" />
-                  {report.sensor_stations.station_code} (รัศมี{" "}
-                  {report.sensor_stations.radius_meters} ม.)
-                </span>
+                  {report.sensor_stations.station_code}{t(" (รัศมี")}{" "}
+                  {report.sensor_stations.radius_meters}{t(" ม.)")}</span>
               )}
             </div>
 
@@ -263,18 +251,12 @@ export default function BackofficeReportDetailPage({
           {/* Panel A: Dispatch to Field Ranger + Telegram Notification */}
           <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 sm:p-5 space-y-4">
             <div className="border-b border-[#E4ECE6] pb-3">
-              <h2 className="text-base font-bold text-[#14241B]">
-                2. มอบหมายชุดปฏิบัติการภาคสนาม (Field Dispatch)
-              </h2>
-              <p className="text-xs text-[#526358]">
-                สั่งการให้เจ้าหน้าที่พิทักษ์ป่าลงพื้นที่ตรวจสอบรอบเสาไมค์ พร้อมส่งแจ้งเตือนผ่าน Telegram
-              </p>
+              <h2 className="text-base font-bold text-[#14241B]">{t("2. มอบหมายชุดปฏิบัติการภาคสนาม (Field Dispatch)")}</h2>
+              <p className="text-xs text-[#526358]">{t("สั่งการให้เจ้าหน้าที่พิทักษ์ป่าลงพื้นที่ตรวจสอบรอบเสาไมค์ พร้อมส่งแจ้งเตือนผ่าน Telegram")}</p>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                เจ้าหน้าที่ภาคสนามผู้รับผิดชอบ
-              </label>
+              <label className="block text-xs font-semibold text-[#14241B] mb-1">{t("เจ้าหน้าที่ภาคสนามผู้รับผิดชอบ")}</label>
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
@@ -289,9 +271,7 @@ export default function BackofficeReportDetailPage({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                คำสั่งการ / จุดเน้นในการตรวจสอบพื้นที่
-              </label>
+              <label className="block text-xs font-semibold text-[#14241B] mb-1">{t("คำสั่งการ / จุดเน้นในการตรวจสอบพื้นที่")}</label>
               <textarea
                 rows={3}
                 value={dispatchNote}
@@ -306,9 +286,7 @@ export default function BackofficeReportDetailPage({
                 checked={sendTelegram}
                 onChange={(e) => setSendTelegram(e.target.checked)}
               />
-              <span>
-                ส่งข้อความแจ้งเตือนด่วนเข้า Telegram ของชุดปฏิบัติการทันที
-              </span>
+              <span>{t("ส่งข้อความแจ้งเตือนด่วนเข้า Telegram ของชุดปฏิบัติการทันที")}</span>
             </label>
 
             <button
@@ -320,8 +298,8 @@ export default function BackofficeReportDetailPage({
               <Send className="h-4 w-4" />
               <span>
                 {report.status === "pending"
-                  ? "มอบหมายงานภาคสนาม & แจ้งเตือน Telegram"
-                  : "อัปเดตคำสั่งการ & ส่งแจ้งเตือนซ้ำ"}
+                  ? t("มอบหมายงานภาคสนาม & แจ้งเตือน Telegram")
+                  : t("อัปเดตคำสั่งการ & ส่งแจ้งเตือนซ้ำ")}
               </span>
             </button>
           </section>
@@ -329,9 +307,7 @@ export default function BackofficeReportDetailPage({
           {/* Panel B: Field Ranger Inspection Result & Evidence Gallery */}
           <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between border-b border-[#E4ECE6] pb-3">
-              <h2 className="text-base font-bold text-[#14241B]">
-                3. ผลการลงพื้นที่ตรวจสอบของเจ้าหน้าที่ภาคสนาม
-              </h2>
+              <h2 className="text-base font-bold text-[#14241B]">{t("3. ผลการลงพื้นที่ตรวจสอบของเจ้าหน้าที่ภาคสนาม")}</h2>
               {report.field_outcome && (
                 <FieldOutcomeBadge outcome={report.field_outcome} />
               )}
@@ -340,12 +316,11 @@ export default function BackofficeReportDetailPage({
             {report.field_outcome ? (
               <div className="space-y-3 text-xs">
                 <p className="rounded-lg border border-[#D4DCD5] bg-[#F8FAF8] p-3 text-[#14241B] leading-relaxed">
-                  {report.field_notes || "ไม่มีบันทึกเพิ่มเติม"}
+                  {report.field_notes || t("ไม่มีบันทึกเพิ่มเติม")}
                 </p>
                 {report.submitted_at && (
-                  <p className="text-[#526358]">
-                    ส่งผลเมื่อ:{" "}
-                    {new Date(report.submitted_at).toLocaleString("th-TH", {
+                  <p className="text-[#526358]">{t("ส่งผลเมื่อ:")}{" "}
+                    {new Date(report.submitted_at).toLocaleString(language === "en" ? "en-GB" : "th-TH", {
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
@@ -355,10 +330,10 @@ export default function BackofficeReportDetailPage({
             ) : (
               <div className="rounded-lg border border-dashed border-[#C6D1C8] bg-[#F8FAF8] p-4 text-xs text-[#526358]">
                 {report.status === "acknowledged"
-                  ? "เจ้าหน้าที่ภาคสนามรับทราบงานแล้ว กำลังเดินทางเข้าตรวจสอบพื้นที่รอบเสาไมค์"
+                  ? t("เจ้าหน้าที่ภาคสนามรับทราบงานแล้ว กำลังเดินทางเข้าตรวจสอบพื้นที่รอบเสาไมค์")
                   : report.status === "dispatched"
-                    ? "ส่งใบงานแล้ว รอเจ้าหน้าที่ภาคสนามกดรับทราบงานและลงพื้นที่"
-                    : "ยังไม่มีผลตรวจภาคสนาม (คุณสามารถสลับไปโหมดภาคสนามเพื่อจำลองการรับงานและส่งผลได้ทันที)"}
+                    ? t("ส่งใบงานแล้ว รอเจ้าหน้าที่ภาคสนามกดรับทราบงานและลงพื้นที่")
+                    : t("ยังไม่มีผลตรวจภาคสนาม (คุณสามารถสลับไปโหมดภาคสนามเพื่อจำลองการรับงานและส่งผลได้ทันที)")}
                 <div className="mt-2">
                   <Link
                     href={`/reports/${report.id}`}
@@ -367,9 +342,7 @@ export default function BackofficeReportDetailPage({
                       window.location.href = `/home`;
                     }}
                     className="font-semibold text-[#1B4332] hover:underline"
-                  >
-                    เปิดหน้าจอเจ้าหน้าที่ภาคสนามเพื่อรับงานนี้ →
-                  </Link>
+                  >{t("เปิดหน้าจอเจ้าหน้าที่ภาคสนามเพื่อรับงานนี้ →")}</Link>
                 </div>
               </div>
             )}
@@ -377,8 +350,7 @@ export default function BackofficeReportDetailPage({
             {/* Evidence Photos */}
             {report.report_evidence && report.report_evidence.length > 0 && (
               <div className="pt-2">
-                <p className="text-xs font-semibold text-[#526358] mb-2">
-                  ภาพถ่าย/วิดีโอหลักฐานจากจุดเกิดเหตุ ({report.report_evidence.length}):
+                <p className="text-xs font-semibold text-[#526358] mb-2">{t("ภาพถ่าย/วิดีโอหลักฐานจากจุดเกิดเหตุ (")}{report.report_evidence.length}):
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {report.report_evidence.map((ev) => (
@@ -391,7 +363,7 @@ export default function BackofficeReportDetailPage({
                     >
                       <img
                         src={ev.file_url}
-                        alt={ev.file_name ?? "ภาพหลักฐาน"}
+                        alt={ev.file_name ?? t("ภาพหลักฐาน")}
                         className="h-24 w-full object-cover"
                       />
                     </a>
@@ -404,23 +376,17 @@ export default function BackofficeReportDetailPage({
           {/* Panel C: Backoffice Official Verification & Audit Decision */}
           <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 sm:p-5 space-y-4">
             <div className="border-b border-[#E4ECE6] pb-3">
-              <h2 className="text-base font-bold text-[#14241B]">
-                4. การยืนยันผลและปิดงานโดยศูนย์สั่งการ
-              </h2>
-              <p className="text-xs text-[#526358]">
-                บันทึกผลการพิจารณาขั้นสุดท้ายเพื่อเก็บในประวัติปฏิบัติการและใช้พัฒนาความแม่นยำของระบบ AI
-              </p>
+              <h2 className="text-base font-bold text-[#14241B]">{t("4. การยืนยันผลและปิดงานโดยศูนย์สั่งการ")}</h2>
+              <p className="text-xs text-[#526358]">{t("บันทึกผลการพิจารณาขั้นสุดท้ายเพื่อเก็บในประวัติปฏิบัติการและใช้พัฒนาความแม่นยำของระบบ AI")}</p>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-[#14241B] mb-1">
-                บันทึกสรุปผลการตรวจสอบของเจ้าหน้าที่ส่วนกลาง
-              </label>
+              <label className="block text-xs font-semibold text-[#14241B] mb-1">{t("บันทึกสรุปผลการตรวจสอบของเจ้าหน้าที่ส่วนกลาง")}</label>
               <textarea
                 rows={2}
                 value={reviewNotes}
                 onChange={(e) => setReviewNotes(e.target.value)}
-                placeholder="ระบุสรุปผลการตรวจสอบหรือเหตุผลในการปิดงาน..."
+                placeholder={t("ระบุสรุปผลการตรวจสอบหรือเหตุผลในการปิดงาน...")}
                 className="w-full rounded-lg border border-[#B8C7BC] bg-white p-2.5 text-xs sm:text-sm"
               />
             </div>
@@ -433,7 +399,7 @@ export default function BackofficeReportDetailPage({
                 className="min-h-11 flex items-center justify-center gap-1.5 rounded-lg bg-[#D62828] px-3 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
               >
                 <ShieldCheck className="h-4 w-4 shrink-0" />
-                <span>ยืนยันเหตุจริง</span>
+                <span>{t("ยืนยันเหตุจริง")}</span>
               </button>
 
               <button
@@ -443,7 +409,7 @@ export default function BackofficeReportDetailPage({
                 className="min-h-11 flex items-center justify-center gap-1.5 rounded-lg border border-[#C6D1C8] bg-white px-3 py-2.5 text-xs sm:text-sm font-semibold text-[#526358] hover:bg-slate-100 disabled:opacity-50"
               >
                 <XCircle className="h-4 w-4 shrink-0" />
-                <span>ปฏิเสธ (เสียงรบกวน)</span>
+                <span>{t("ปฏิเสธ (เสียงรบกวน)")}</span>
               </button>
 
               <button
@@ -453,7 +419,7 @@ export default function BackofficeReportDetailPage({
                 className="min-h-11 flex items-center justify-center gap-1.5 rounded-lg bg-[#2D8A3E] px-3 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>ตรวจแล้ว & ปิดงาน</span>
+                <span>{t("ตรวจแล้ว & ปิดงาน")}</span>
               </button>
             </div>
 
@@ -468,8 +434,7 @@ export default function BackofficeReportDetailPage({
                   <p
                     id="confirm-decision-title"
                     className="text-sm font-bold text-[#14241B]"
-                  >
-                    ยืนยันการเปลี่ยนสถานะรายงานเป็น:{" "}
+                  >{t("ยืนยันการเปลี่ยนสถานะรายงานเป็น:")}{" "}
                     <span
                       className={
                         pendingDecision === "confirmed"
@@ -480,16 +445,12 @@ export default function BackofficeReportDetailPage({
                       }
                     >
                       {pendingDecision === "confirmed"
-                        ? "“ยืนยันเหตุผิดปกติจริง”"
+                        ? t("“ยืนยันเหตุผิดปกติจริง”")
                         : pendingDecision === "rejected"
-                          ? "“ปฏิเสธรายงาน (เสียงรบกวน/ธรรมชาติ)”"
-                          : "“ตรวจสอบเสร็จสิ้น & ปิดงาน”"}
-                    </span>{" "}
-                    ใช่หรือไม่?
-                  </p>
-                  <p className="mt-1 text-xs text-[#526358]">
-                    โปรดตรวจสอบความถูกต้องก่อนกดยืนยัน ระบบจะบันทึกประวัติการตัดสินใจลงฐานข้อมูลทันที
-                  </p>
+                          ? t("“ปฏิเสธรายงาน (เสียงรบกวน/ธรรมชาติ)”")
+                          : t("“ตรวจสอบเสร็จสิ้น & ปิดงาน”")}
+                    </span>{" "}{t("ใช่หรือไม่?")}</p>
+                  <p className="mt-1 text-xs text-[#526358]">{t("โปรดตรวจสอบความถูกต้องก่อนกดยืนยัน ระบบจะบันทึกประวัติการตัดสินใจลงฐานข้อมูลทันที")}</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -502,8 +463,8 @@ export default function BackofficeReportDetailPage({
                     <CheckCircle2 className="h-4 w-4" />
                     <span>
                       {busy
-                        ? "กำลังบันทึกผล…"
-                        : "ใช่, ยืนยันการบันทึกผลนี้"}
+                        ? t("กำลังบันทึกผล…")
+                        : t("ใช่, ยืนยันการบันทึกผลนี้")}
                     </span>
                   </button>
                   <button
@@ -511,9 +472,7 @@ export default function BackofficeReportDetailPage({
                     disabled={busy}
                     onClick={() => setPendingDecision(null)}
                     className="min-h-11 inline-flex items-center justify-center rounded-lg border border-[#B8C7BC] bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-[#14241B] hover:bg-slate-100"
-                  >
-                    ยกเลิก (ย้อนกลับ)
-                  </button>
+                  >{t("ยกเลิก (ย้อนกลับ)")}</button>
                 </div>
               </div>
             )}

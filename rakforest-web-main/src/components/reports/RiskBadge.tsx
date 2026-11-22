@@ -1,3 +1,5 @@
+"use client";
+import { useLanguage } from "@/lib/i18n/language";
 import {
   OUTCOME_LABELS_TH,
   RISK_LABELS_TH,
@@ -18,6 +20,7 @@ export function RiskBadge({
   level: RiskLevel;
   size?: "xs" | "sm" | "md";
 }) {
+  const { t } = useLanguage();
   const styles: Record<RiskLevel, string> = {
     red: "bg-red-50 text-red-800 border-red-300",
     yellow: "bg-amber-50 text-amber-800 border-amber-300",
@@ -40,12 +43,13 @@ export function RiskBadge({
       className={`inline-flex items-center gap-1.5 rounded border font-semibold whitespace-nowrap ${styles[level]} ${sizeClass}`}
     >
       <span className={`h-2 w-2 rounded-full ${dotStyles[level]}`} />
-      {RISK_LABELS_TH[level]}
+      {t(RISK_LABELS_TH[level])}
     </span>
   );
 }
 
 export function ReportStatusBadge({ status }: { status: ReportStatus }) {
+  const { t } = useLanguage();
   const styles: Record<ReportStatus, string> = {
     pending: "bg-amber-50 text-amber-900 border-amber-300",
     under_review: "bg-blue-50 text-blue-800 border-blue-300",
@@ -61,12 +65,13 @@ export function ReportStatusBadge({ status }: { status: ReportStatus }) {
     <span
       className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium whitespace-nowrap ${styles[status]}`}
     >
-      {STATUS_LABELS_TH[status]}
+      {t(STATUS_LABELS_TH[status])}
     </span>
   );
 }
 
 export function StationStatusBadge({ status }: { status: StationStatus }) {
+  const { t } = useLanguage();
   const styles: Record<StationStatus, string> = {
     online: "bg-emerald-50 text-emerald-800 border-emerald-300",
     offline: "bg-red-50 text-red-800 border-red-300",
@@ -85,12 +90,13 @@ export function StationStatusBadge({ status }: { status: StationStatus }) {
               : "bg-amber-600"
         }`}
       />
-      {STATION_STATUS_TH[status]}
+      {t(STATION_STATUS_TH[status])}
     </span>
   );
 }
 
 export function FieldOutcomeBadge({ outcome }: { outcome: FieldOutcome }) {
+  const { t } = useLanguage();
   const styles: Record<FieldOutcome, string> = {
     found: "bg-red-50 text-red-800 border-red-300",
     not_found: "bg-emerald-50 text-emerald-800 border-emerald-300",
@@ -100,7 +106,7 @@ export function FieldOutcomeBadge({ outcome }: { outcome: FieldOutcome }) {
     <span
       className={`inline-flex items-center rounded border px-2.5 py-0.5 text-xs font-semibold ${styles[outcome]}`}
     >
-      {OUTCOME_LABELS_TH[outcome]}
+      {t(OUTCOME_LABELS_TH[outcome])}
     </span>
   );
 }

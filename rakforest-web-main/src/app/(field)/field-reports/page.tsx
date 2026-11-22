@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -13,6 +14,7 @@ import {
 import type { ReportRecord } from "@/types/database.types";
 
 export default function FieldReportsListPage() {
+  const { t } = useLanguage();
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [tab, setTab] = useState<"active" | "completed">("active");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -48,12 +50,8 @@ export default function FieldReportsListPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">
-            ภารกิจตรวจสอบเสาไมค์และประวัติการแจ้งเหตุภาคสนาม
-          </h1>
-          <p className="text-xs sm:text-sm text-[#526358]">
-            รับทราบใบงานจากศูนย์สั่งการ ลงพื้นที่ตรวจสอบรัศมีเสาไมโครโฟน และส่งผลการตรวจพื้นที่พร้อมรูปถ่าย
-          </p>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">{t("ภารกิจตรวจสอบเสาไมค์และประวัติการแจ้งเหตุภาคสนาม")}</h1>
+          <p className="text-xs sm:text-sm text-[#526358]">{t("รับทราบใบงานจากศูนย์สั่งการ ลงพื้นที่ตรวจสอบรัศมีเสาไมโครโฟน และส่งผลการตรวจพื้นที่พร้อมรูปถ่าย")}</p>
         </div>
 
         <Link
@@ -61,7 +59,7 @@ export default function FieldReportsListPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-[#D62828] px-4 py-2.5 text-xs sm:text-sm font-bold text-white hover:bg-red-700"
         >
           <Mic className="h-4 w-4" />
-          <span>+ แจ้งเหตุฉุกเฉิน / อัดเสียงสด</span>
+          <span>{t("+ แจ้งเหตุฉุกเฉิน / อัดเสียงสด")}</span>
         </Link>
       </div>
 
@@ -75,9 +73,7 @@ export default function FieldReportsListPage() {
               ? "bg-[#1B4332] text-white"
               : "bg-white border border-[#C6D1C8] text-[#526358]"
           }`}
-        >
-          ภารกิจที่ต้องดำเนินการ (
-          {
+        >{t("ภารกิจที่ต้องดำเนินการ (")}{
             reports.filter((r) =>
               ["pending", "under_review", "dispatched", "acknowledged"].includes(
                 r.status
@@ -94,9 +90,7 @@ export default function FieldReportsListPage() {
               ? "bg-[#1B4332] text-white"
               : "bg-white border border-[#C6D1C8] text-[#526358]"
           }`}
-        >
-          ส่งผลตรวจแล้ว / ปิดงานแล้ว (
-          {
+        >{t("ส่งผลตรวจแล้ว / ปิดงานแล้ว (")}{
             reports.filter((r) =>
               ["submitted", "confirmed", "rejected", "closed"].includes(r.status)
             ).length
@@ -129,13 +123,13 @@ export default function FieldReportsListPage() {
                         <Radio className="h-3.5 w-3.5" />
                         <span>
                           {item.sensor_stations?.station_code ?? "ST-01"} ·{" "}
-                          {item.sensor_stations?.name ?? "เสาไมค์"}
+                          {item.sensor_stations?.name ?? t("เสาไมค์")}
                         </span>
                       </>
                     ) : (
                       <>
                         <Send className="h-3.5 w-3.5" />
-                        <span>แจ้งเหตุลาดตระเวนภาคสนาม</span>
+                        <span>{t("แจ้งเหตุลาดตระเวนภาคสนาม")}</span>
                       </>
                     )}
                   </span>
@@ -143,9 +137,8 @@ export default function FieldReportsListPage() {
                 </div>
 
                 {ai && (
-                  <p className="text-xs text-[#14241B]">
-                    เสียงที่ตรวจพบ:{" "}
-                    <strong>{getClassNameTh(ai.predicted_label)}</strong> (
+                  <p className="text-xs text-[#14241B]">{t("เสียงที่ตรวจพบ:")}{" "}
+                    <strong>{t(getClassNameTh(ai.predicted_label))}</strong> (
                     <span className="font-mono-code font-bold text-[#1B4332]">
                       {Math.round(ai.confidence * 100)}%
                     </span>
@@ -173,7 +166,7 @@ export default function FieldReportsListPage() {
                     className="flex-1 min-h-10 inline-flex items-center justify-center gap-1 rounded-lg bg-[#1B4332] px-3 py-2 text-xs font-semibold text-white hover:bg-[#2D6A4F]"
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>รับทราบงาน</span>
+                    <span>{t("รับทราบงาน")}</span>
                   </button>
                 )}
                 <Link
@@ -182,8 +175,8 @@ export default function FieldReportsListPage() {
                 >
                   <span>
                     {item.status === "acknowledged"
-                      ? "บันทึกผลตรวจพื้นที่"
-                      : "ดูรายละเอียด & แผนที่"}
+                      ? t("บันทึกผลตรวจพื้นที่")
+                      : t("ดูรายละเอียด & แผนที่")}
                   </span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>

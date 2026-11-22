@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -29,6 +30,7 @@ const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
 });
 
 export default function BackofficeGisMapPage() {
+  const { t } = useLanguage();
   const [zones, setZones] = useState<ForestZone[]>([]);
   const [stations, setStations] = useState<SensorStation[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
@@ -67,26 +69,18 @@ export default function BackofficeGisMapPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#14241B]">
-            แผนที่ภูมิสารสนเทศ (GIS) โซนป่าไม้และโครงข่ายเสาไมค์
-          </h1>
-          <p className="text-xs text-[#526358]">
-            แสดงขอบเขตโซนป่าอนุรักษ์ วงรัศมีรับเสียงของเสาไมค์ (ST-01 ถึง ST-06) และจุดเกิดเหตุแบบเรียลไทม์
-          </p>
+          <h1 className="text-xl font-bold text-[#14241B]">{t("แผนที่ภูมิสารสนเทศ (GIS) โซนป่าไม้และโครงข่ายเสาไมค์")}</h1>
+          <p className="text-xs text-[#526358]">{t("แสดงขอบเขตโซนป่าอนุรักษ์ วงรัศมีรับเสียงของเสาไมค์ (ST-01 ถึง ST-06) และจุดเกิดเหตุแบบเรียลไทม์")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/reports?upload=1"
             className="rounded-lg bg-[#1B4332] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#2D6A4F]"
-          >
-            + อัปโหลดเสียงทดสอบเสาไมค์
-          </Link>
+          >{t("+ อัปโหลดเสียงทดสอบเสาไมค์")}</Link>
           <Link
             href="/zones"
             className="rounded-lg border border-[#B8C7BC] bg-white px-3.5 py-2 text-xs font-semibold text-[#1B4332] hover:bg-[#EBF2ED]"
-          >
-            ตั้งค่าขอบเขตโซน / เสาไมค์
-          </Link>
+          >{t("ตั้งค่าขอบเขตโซน / เสาไมค์")}</Link>
         </div>
       </div>
 
@@ -126,8 +120,7 @@ export default function BackofficeGisMapPage() {
                   ? "border-[#1B4332] bg-[#1B4332] text-white"
                   : "border-[#C6D1C8] bg-white text-[#14241B]"
               }`}
-            >
-              ทุกเสาไมค์ ({stations.length})
+            >{t("ทุกเสาไมค์ (")}{stations.length})
             </button>
             {stations.map((st) => (
               <button
@@ -156,9 +149,7 @@ export default function BackofficeGisMapPage() {
             onClick={() => setMobileSheetOpen((v) => !v)}
             className="w-full flex items-center justify-between bg-[#163628] text-white px-4 py-3 text-left text-xs font-semibold lg:cursor-default"
           >
-            <span>
-              รายละเอียดจุดตรวจและเหตุการณ์ในรัศมีเสาไมค์ (
-              {activeStation ? activeStation.station_code : "ทั้งหมด"})
+            <span>{t("รายละเอียดจุดตรวจและเหตุการณ์ในรัศมีเสาไมค์ (")}{activeStation ? activeStation.station_code : t("ทั้งหมด")})
             </span>
             <span className="lg:hidden">
               {mobileSheetOpen ? (
@@ -188,25 +179,24 @@ export default function BackofficeGisMapPage() {
                 </h2>
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                   <div>
-                    <span className="text-[#526358] block">พิกัด GPS</span>
+                    <span className="text-[#526358] block">{t("พิกัด GPS")}</span>
                     <strong className="font-mono-code text-[#14241B]">
                       {activeStation.lat.toFixed(4)}, {activeStation.lng.toFixed(4)}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[#526358] block">รัศมีรับเสียง</span>
+                    <span className="text-[#526358] block">{t("รัศมีรับเสียง")}</span>
                     <strong className="font-mono-code text-[#14241B]">
-                      {activeStation.radius_meters} เมตร
-                    </strong>
+                      {activeStation.radius_meters}{t(" เมตร")}</strong>
                   </div>
                   <div>
-                    <span className="text-[#526358] block">ระดับแบตเตอรี่</span>
+                    <span className="text-[#526358] block">{t("ระดับแบตเตอรี่")}</span>
                     <strong className="font-mono-code text-[#14241B]">
                       {activeStation.battery_percent}%
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[#526358] block">โซนป่าไม้</span>
+                    <span className="text-[#526358] block">{t("โซนป่าไม้")}</span>
                     <strong className="text-[#14241B] truncate block">
                       {activeZone?.zone_code ?? "ZN-CM-01"}
                     </strong>
@@ -219,55 +209,44 @@ export default function BackofficeGisMapPage() {
                 )}
               </div>
             ) : (
-              <div className="rounded-lg border border-[#D4DCD5] bg-[#F8FAF8] p-3 text-xs text-[#526358]">
-                แสดงข้อมูลรวมทุกเสาไมค์ คลิกที่หมุดเสาบนแผนที่เพื่อเจาะจงรายเสา
-              </div>
+              <div className="rounded-lg border border-[#D4DCD5] bg-[#F8FAF8] p-3 text-xs text-[#526358]">{t("แสดงข้อมูลรวมทุกเสาไมค์ คลิกที่หมุดเสาบนแผนที่เพื่อเจาะจงรายเสา")}</div>
             )}
 
             {/* Selected Forest Zone Summary */}
             {activeZone && (
               <div className="rounded-lg border border-[#D4DCD5] p-3.5 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#526358]">
-                    โซนป่าไม้: {activeZone.zone_code}
+                  <span className="text-xs font-semibold text-[#526358]">{t("โซนป่าไม้: ")}{activeZone.zone_code}
                   </span>
                   <RiskBadge level={activeZone.current_risk_level} size="xs" />
                 </div>
                 <p className="text-xs font-bold text-[#14241B]">
                   {activeZone.name}
                 </p>
-                <p className="text-xs text-[#526358]">
-                  อ.{activeZone.district} จ.{activeZone.province} • พื้นที่ประมาณ{" "}
+                <p className="text-xs text-[#526358]">{t("อ.")}{activeZone.district}{t(" จ.")}{activeZone.province}{t(" • พื้นที่ประมาณ")}{" "}
                   <strong className="font-mono-code">
                     {activeZone.area_rai?.toLocaleString()}
-                  </strong>{" "}
-                  ไร่
-                </p>
+                  </strong>{" "}{t("ไร่")}</p>
               </div>
             )}
 
             {/* Related Reports List */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#526358]">
-                  สัญญาณและรายงานในจุดนี้ ({stationReports.length})
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#526358]">{t("สัญญาณและรายงานในจุดนี้ (")}{stationReports.length})
                 </h3>
                 {selectedStationId && (
                   <button
                     type="button"
                     onClick={() => setSelectedStationId(null)}
                     className="text-xs font-semibold text-[#1B4332] hover:underline"
-                  >
-                    ดูทุกเสา
-                  </button>
+                  >{t("ดูทุกเสา")}</button>
                 )}
               </div>
 
               <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
                 {stationReports.length === 0 ? (
-                  <p className="text-xs text-[#526358] py-6 text-center">
-                    ยังไม่มีรายงานเหตุการณ์ของเสาไมค์นี้
-                  </p>
+                  <p className="text-xs text-[#526358] py-6 text-center">{t("ยังไม่มีรายงานเหตุการณ์ของเสาไมค์นี้")}</p>
                 ) : (
                   stationReports.map((rep) => {
                     const ai = rep.report_audio?.[0]?.ai_classifications?.[0];
@@ -285,7 +264,7 @@ export default function BackofficeGisMapPage() {
                         </div>
                         {ai && (
                           <p className="mt-1 text-xs font-semibold text-[#1B4332]">
-                            {getClassNameTh(ai.predicted_label)} (
+                            {t(getClassNameTh(ai.predicted_label))} (
                             {Math.round(ai.confidence * 100)}%)
                           </p>
                         )}
@@ -294,8 +273,7 @@ export default function BackofficeGisMapPage() {
                         </p>
                         <div className="mt-2 flex items-center justify-between">
                           <ReportStatusBadge status={rep.status} />
-                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B4332]">
-                            รายละเอียด <ArrowRight className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B4332]">{t("รายละเอียด ")}<ArrowRight className="h-3 w-3" />
                           </span>
                         </div>
                       </Link>

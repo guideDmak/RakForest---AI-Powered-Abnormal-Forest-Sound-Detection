@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { accountRoles, type ActiveRole } from "@/lib/accounts/validation";
 import { accountCardUrl } from "@/lib/accounts/service";
@@ -23,11 +24,12 @@ export function statusOf(profile: Profile): string {
       : "ใช้งานอยู่";
 }
 export function RoleOptions() {
+  const { t } = useLanguage();
   return (
     <>
       {Object.entries(accountRoles).map(([value, label]) => (
         <option key={value} value={value}>
-          {label}
+          {t(label)}
         </option>
       ))}
     </>
@@ -46,6 +48,7 @@ export function AccountDialog({
   children: ReactNode;
   fallbackFocus?: React.RefObject<HTMLElement | null>;
 }) {
+  const { t } = useLanguage();
   const ref = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -99,7 +102,7 @@ export function AccountDialog({
     >
       <div className="mb-4 flex items-start justify-between gap-3">
         <h2 id={titleId} className="text-lg font-bold">
-          {title}
+          {t(title)}
         </h2>
         <button
           ref={closeRef}
@@ -109,7 +112,7 @@ export function AccountDialog({
           disabled={busy}
           onClick={onClose}
         >
-          ปิด
+          {t("ปิด")}
         </button>
       </div>
       {children}
@@ -127,6 +130,7 @@ export function AccountReview({
   onRole: (role: ActiveRole) => void;
   busy: boolean;
 }) {
+  const { t } = useLanguage();
   const [cardUrl, setCardUrl] = useState("");
   const [cardError, setCardError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -144,20 +148,20 @@ export function AccountReview({
   return (
     <div className="space-y-4">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm [&_dd]:break-words [&_dd]:min-w-0">
-        <dt>ชื่อ</dt>
+        <dt>{t("ชื่อ")}</dt>
         <dd className="font-semibold">{profile.full_name}</dd>
-        <dt>รหัส</dt>
+        <dt>{t("รหัส")}</dt>
         <dd>{profile.employee_code}</dd>
-        <dt>อีเมล</dt>
-        <dd>{profile.email || "ไม่ได้ระบุ"}</dd>
-        <dt>โทรศัพท์</dt>
-        <dd>{profile.phone || "ไม่ได้ระบุ"}</dd>
-        <dt>ตำแหน่ง</dt>
-        <dd>{profile.position || "ไม่ได้ระบุ"}</dd>
-        <dt>หน่วยงาน</dt>
-        <dd>{profile.department || "ไม่ได้ระบุ"}</dd>
-        <dt>สถานะ</dt>
-        <dd>{statusOf(profile)}</dd>
+        <dt>{t("อีเมล")}</dt>
+        <dd>{profile.email || t("ไม่ได้ระบุ")}</dd>
+        <dt>{t("โทรศัพท์")}</dt>
+        <dd>{profile.phone || t("ไม่ได้ระบุ")}</dd>
+        <dt>{t("ตำแหน่ง")}</dt>
+        <dd>{profile.position || t("ไม่ได้ระบุ")}</dd>
+        <dt>{t("หน่วยงาน")}</dt>
+        <dd>{profile.department || t("ไม่ได้ระบุ")}</dd>
+        <dt>{t("สถานะ")}</dt>
+        <dd>{t(statusOf(profile))}</dd>
       </dl>
       {profile.id_card_file_url ? (
         <div className="space-y-2">
@@ -167,11 +171,11 @@ export function AccountReview({
             disabled={loading}
             onClick={openCard}
           >
-            {loading ? "กำลังเปิดบัตร…" : "ดูบัตรเจ้าหน้าที่"}
+            {loading ? t("กำลังเปิดบัตร…") : t("ดูบัตรเจ้าหน้าที่")}
           </button>
           {cardError && (
             <p role="alert" className="text-sm text-red-800">
-              {cardError}
+              {t(cardError)}
             </p>
           )}
           {cardUrl && (
@@ -181,15 +185,15 @@ export function AccountReview({
               rel="noreferrer"
               className="block text-sm underline"
             >
-              เปิดภาพบัตร (ลิงก์หมดอายุใน 5 นาที)
+              {t("เปิดภาพบัตร (ลิงก์หมดอายุใน 5 นาที)")}
             </a>
           )}
         </div>
       ) : (
-        <p className="text-sm text-[#526358]">ไม่ได้แนบบัตรเจ้าหน้าที่</p>
+        <p className="text-sm text-[#526358]">{t("ไม่ได้แนบบัตรเจ้าหน้าที่")}</p>
       )}
       <label className="block text-sm font-semibold">
-        บทบาทที่จะเปิดใช้งาน
+        {t("บทบาทที่จะเปิดใช้งาน")}
         <select
           className={control + " mt-1"}
           value={role}
@@ -200,7 +204,7 @@ export function AccountReview({
         </select>
       </label>
       <p className="text-sm text-[#526358]">
-        ตรวจข้อมูลเจ้าหน้าที่ให้ถูกต้องก่อนอนุมัติ บัญชีจะเข้าใช้งานได้ตามบทบาทที่เลือก
+        {t("ตรวจข้อมูลเจ้าหน้าที่ให้ถูกต้องก่อนอนุมัติ บัญชีจะเข้าใช้งานได้ตามบทบาทที่เลือก")}
       </p>
     </div>
   );

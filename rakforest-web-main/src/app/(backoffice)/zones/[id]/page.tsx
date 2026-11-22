@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ export default function BackofficeZoneDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { t } = useLanguage();
   const { id } = use(params);
   const [zone, setZone] = useState<ForestZone | null>(null);
   const [stations, setStations] = useState<SensorStation[]>([]);
@@ -47,9 +49,7 @@ export default function BackofficeZoneDetailPage({
 
   if (!zone) {
     return (
-      <div className="rounded-lg border border-[#D4DCD5] bg-white p-8 text-center text-sm text-[#526358]">
-        กำลังโหลดข้อมูลโซนป่าไม้…
-      </div>
+      <div className="rounded-lg border border-[#D4DCD5] bg-white p-8 text-center text-sm text-[#526358]">{t("กำลังโหลดข้อมูลโซนป่าไม้…")}</div>
     );
   }
 
@@ -60,21 +60,15 @@ export default function BackofficeZoneDetailPage({
           href="/zones"
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1B4332] hover:underline"
         >
-          <ArrowLeft className="h-4 w-4" />
-          กลับหน้าจัดการโซนป่าไม้และเสาไมค์
-        </Link>
+          <ArrowLeft className="h-4 w-4" />{t("กลับหน้าจัดการโซนป่าไม้และเสาไมค์")}</Link>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-bold text-[#14241B]">{zone.name}</h1>
           <RiskBadge level={zone.current_risk_level} size="md" />
         </div>
-        <p className="text-xs text-[#526358] mt-1">
-          รหัสโซน: <span className="font-mono-code font-bold">{zone.zone_code}</span>{" "}
-          • อ.{zone.district} จ.{zone.province} • พื้นที่{" "}
+        <p className="text-xs text-[#526358] mt-1">{t("รหัสโซน: ")}<span className="font-mono-code font-bold">{zone.zone_code}</span>{" "}{t("• อ.")}{zone.district}{t(" จ.")}{zone.province}{t(" • พื้นที่")}{" "}
           <span className="font-mono-code font-bold">
             {zone.area_rai?.toLocaleString()}
-          </span>{" "}
-          ไร่
-        </p>
+          </span>{" "}{t("ไร่")}</p>
       </div>
 
       <RiskZoneMap
@@ -87,9 +81,7 @@ export default function BackofficeZoneDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 space-y-3">
-          <h2 className="text-base font-bold text-[#14241B]">
-            เสาไมโครโฟนตรวจจับเสียงในโซนนี้ ({stations.length} เสา)
-          </h2>
+          <h2 className="text-base font-bold text-[#14241B]">{t("เสาไมโครโฟนตรวจจับเสียงในโซนนี้ (")}{stations.length}{t(" เสา)")}</h2>
           {stations.map((st) => (
             <div
               key={st.id}
@@ -105,9 +97,8 @@ export default function BackofficeZoneDetailPage({
                     {st.name}
                   </span>
                 </div>
-                <p className="font-mono-code text-[11px] text-[#526358] mt-1">
-                  พิกัด {st.lat.toFixed(4)}, {st.lng.toFixed(4)} • รัศมี{" "}
-                  {st.radius_meters} ม. • แบตเตอรี่ {st.battery_percent}%
+                <p className="font-mono-code text-[11px] text-[#526358] mt-1">{t("พิกัด ")}{st.lat.toFixed(4)}, {st.lng.toFixed(4)}{t(" • รัศมี")}{" "}
+                  {st.radius_meters}{t(" ม. • แบตเตอรี่ ")}{st.battery_percent}%
                 </p>
               </div>
               <StationStatusBadge status={st.status} />
@@ -116,9 +107,7 @@ export default function BackofficeZoneDetailPage({
         </section>
 
         <section className="rounded-lg border border-[#D4DCD5] bg-white p-4 space-y-3">
-          <h2 className="text-base font-bold text-[#14241B]">
-            รายงานเหตุการณ์ในโซนนี้ ({reports.length} รายการ)
-          </h2>
+          <h2 className="text-base font-bold text-[#14241B]">{t("รายงานเหตุการณ์ในโซนนี้ (")}{reports.length}{t(" รายการ)")}</h2>
           {reports.map((rep) => (
             <Link
               key={rep.id}
@@ -134,8 +123,7 @@ export default function BackofficeZoneDetailPage({
               <p className="text-xs text-[#526358] mt-1">{rep.description}</p>
               <div className="mt-2 flex items-center justify-between">
                 <ReportStatusBadge status={rep.status} />
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B4332]">
-                  เปิดดู <ArrowRight className="h-3.5 w-3.5" />
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#1B4332]">{t("เปิดดู ")}<ArrowRight className="h-3.5 w-3.5" />
                 </span>
               </div>
             </Link>

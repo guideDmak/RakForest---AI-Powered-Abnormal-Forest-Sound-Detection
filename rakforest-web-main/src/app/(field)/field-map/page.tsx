@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -21,6 +22,7 @@ const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
 });
 
 export default function FieldRangerMapPage() {
+  const { t } = useLanguage();
   const [zones, setZones] = useState<ForestZone[]>([]);
   const [stations, setStations] = useState<SensorStation[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
@@ -45,12 +47,8 @@ export default function FieldRangerMapPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">
-          แผนที่เขตรับผิดชอบและตำแหน่งเสาไมโครโฟน
-        </h1>
-        <p className="text-xs sm:text-sm text-[#526358]">
-          แตะที่เสาไมค์ (ST-XX) เพื่อดูพิกัด GPS วงรัศมีรับเสียง และงานตรวจสอบที่เกี่ยวข้อง
-        </p>
+        <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">{t("แผนที่เขตรับผิดชอบและตำแหน่งเสาไมโครโฟน")}</h1>
+        <p className="text-xs sm:text-sm text-[#526358]">{t("แตะที่เสาไมค์ (ST-XX) เพื่อดูพิกัด GPS วงรัศมีรับเสียง และงานตรวจสอบที่เกี่ยวข้อง")}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -79,16 +77,13 @@ export default function FieldRangerMapPage() {
               </h2>
               <p className="font-mono-code text-xs text-[#526358]">
                 GPS: {selectedStation.lat.toFixed(4)},{" "}
-                {selectedStation.lng.toFixed(4)} • รัศมี{" "}
-                {selectedStation.radius_meters} ม.
-              </p>
+                {selectedStation.lng.toFixed(4)}{t(" • รัศมี")}{" "}
+                {selectedStation.radius_meters}{t(" ม.")}</p>
             </div>
           ) : null}
 
           <div className="space-y-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#526358]">
-              รายการเสาไมค์ทั้งหมด
-            </h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[#526358]">{t("รายการเสาไมค์ทั้งหมด")}</h3>
             {stations.map((st) => (
               <button
                 key={st.id}

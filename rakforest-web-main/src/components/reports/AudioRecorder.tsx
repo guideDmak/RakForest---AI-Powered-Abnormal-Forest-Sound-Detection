@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect, useRef, useState } from "react";
 import { FileAudio, Mic, Square, Trash2, Upload, Wand2 } from "lucide-react";
@@ -76,6 +77,7 @@ function createSynthesizedWavFile(
 }
 
 export default function AudioRecorder({ file, onChange, disabled }: Props) {
+  const { t } = useLanguage();
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState("");
@@ -150,7 +152,7 @@ export default function AudioRecorder({ file, onChange, disabled }: Props) {
             className="flex min-h-14 items-center justify-center gap-2.5 rounded-lg border-2 border-[#1B4332] bg-[#1B4332] px-4 py-3 text-sm font-semibold text-white hover:bg-[#2D6A4F] disabled:opacity-50 transition"
           >
             <Mic className="h-5 w-5" />
-            <span>บันทึกเสียงสดจากไมโครโฟน</span>
+            <span>{t("บันทึกเสียงสดจากไมโครโฟน")}</span>
           </button>
         ) : (
           <button
@@ -159,14 +161,14 @@ export default function AudioRecorder({ file, onChange, disabled }: Props) {
             className="flex min-h-14 items-center justify-center gap-2.5 rounded-lg border-2 border-[#D62828] bg-[#D62828] px-4 py-3 text-sm font-semibold text-white animate-pulse"
           >
             <Square className="h-5 w-5" />
-            <span>กำลังอัดเสียง ({seconds} วินาที) • กดเพื่อหยุด</span>
+            <span>{t("กำลังอัดเสียง (")}{seconds}{t(" วินาที) • กดเพื่อหยุด")}</span>
           </button>
         )}
 
         {/* File Upload Picker */}
         <label className="flex min-h-14 cursor-pointer items-center justify-center gap-2.5 rounded-lg border border-[#8FA394] bg-white px-4 py-3 text-sm font-semibold text-[#1B4332] hover:bg-[#EBF2ED] transition">
           <Upload className="h-5 w-5" />
-          <span>อัปโหลดไฟล์เสียง (.WAV, .MP3, .M4A)</span>
+          <span>{t("อัปโหลดไฟล์เสียง (.WAV, .MP3, .M4A)")}</span>
           <input
             type="file"
             accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm"
@@ -184,7 +186,7 @@ export default function AudioRecorder({ file, onChange, disabled }: Props) {
       <div className="rounded-lg border border-[#D4DCD5] bg-[#F6F9F6] p-3">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-[#526358] mb-2">
           <Wand2 className="h-3.5 w-3.5 text-[#1B4332]" />
-          <span>สร้างไฟล์เสียงสัญญาณตัวอย่าง (.WAV) สำหรับส่งเข้าโมเดล AI ทันที:</span>
+          <span>{t("สร้างไฟล์เสียงสัญญาณตัวอย่าง (.WAV) สำหรับส่งเข้าโมเดล AI ทันที:")}</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {[
@@ -200,7 +202,7 @@ export default function AudioRecorder({ file, onChange, disabled }: Props) {
               onClick={() => onChange(createSynthesizedWavFile(preset.id))}
               className="rounded border border-[#B8C7BC] bg-white px-2.5 py-1.5 text-xs font-medium text-[#14241B] hover:border-[#1B4332] hover:bg-[#EBF2ED] transition"
             >
-              + {preset.label}
+              + {t(preset.label)}
             </button>
           ))}
         </div>
@@ -208,7 +210,7 @@ export default function AudioRecorder({ file, onChange, disabled }: Props) {
 
       {error && (
         <p role="alert" className="text-xs font-medium text-[#D62828]">
-          {error}
+          {t(error)}
         </p>
       )}
 
@@ -231,7 +233,7 @@ export default function AudioRecorder({ file, onChange, disabled }: Props) {
               className="inline-flex items-center gap-1 text-xs font-medium text-[#D62828] hover:underline"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              ลบไฟล์
+              {t("ลบไฟล์")}
             </button>
           </div>
           {previewUrl && (

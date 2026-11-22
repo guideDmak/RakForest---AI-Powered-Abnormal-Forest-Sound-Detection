@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DeleteConfirmation } from "@/components/accounts/delete-dialog";
@@ -54,11 +55,12 @@ function SettingRow({
   danger?: boolean;
   onClick: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
+      aria-label={t(label)}
       className={`flex min-h-14 w-full items-center gap-3 px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:-outline-offset-2 ${danger ? "text-red-800 hover:bg-red-50" : "text-[#1B4332] hover:bg-[#F0F5F1]"}`}
     >
       <span
@@ -67,9 +69,9 @@ function SettingRow({
         <Icon size={18} aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{label}</span>
+        <span className="block text-sm font-semibold">{t(label)}</span>
         <span className="block text-xs leading-relaxed text-[#526358]">
-          {description}
+          {t(description)}
         </span>
       </span>
       <ChevronRight size={16} aria-hidden="true" />
@@ -85,6 +87,7 @@ function roleLabel(profile: Profile) {
       : "ยังไม่ได้กำหนดบทบาท";
 }
 function StatusBadge({ profile }: { profile: Profile }) {
+  const { t } = useLanguage();
   const tone =
     profile.role === "pending_verification"
       ? "bg-amber-50 text-amber-900"
@@ -93,18 +96,19 @@ function StatusBadge({ profile }: { profile: Profile }) {
         : "bg-emerald-50 text-emerald-900";
   return (
     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone}`}>
-      {statusOf(profile)}
+      {t(statusOf(profile))}
     </span>
   );
 }
 
 export default function AccountsPage() {
+  const { t, language } = useLanguage();
   const [profiles, setProfiles] = useState<Profile[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState("");
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("ทั้งหมด"),
-    [feedback, setFeedback] = useState("");
+    [feedback, setFeedback] = useState<{text: string; name?: string}>({text:""});
   const [selection, setSelection] = useState<{ id: string; kind: Step }>(),
     [role, setRole] = useState<ActiveRole>("field_ranger");
   const [busy, setBusy] = useState(false),
@@ -141,7 +145,7 @@ export default function AccountsPage() {
   }, [load]);
   const open = useCallback((profile: Profile, kind: Step) => {
     setSelection({ id: profile.id, kind });
-    setFeedback("");
+    setFeedback({text:""});
     setEmployeeCode(profile.employee_code || "");
     setRole(
       profile.requested_role ??
@@ -211,7 +215,7 @@ export default function AccountsPage() {
       setProfiles((list) =>
         list.map((p) => (p.id === updated.id ? updated : p)),
       );
-      setFeedback(text + " • " + updated.full_name);
+      setFeedback({text, name: updated.full_name});
       setPassword("");
       setSelection({ id: updated.id, kind: "settings" });
     } catch (err) {
@@ -233,38 +237,32 @@ export default function AccountsPage() {
     <div className="space-y-5 text-[#14241B]">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">จัดการเจ้าหน้าที่</h1>
-          <p className="mt-1 text-sm text-[#526358]">
-            ค้นหาบัญชี ตรวจข้อมูล และอนุมัติการเข้าใช้งาน
-          </p>
+          <h1 className="text-2xl font-bold">{t("จัดการเจ้าหน้าที่")}</h1>
+          <p className="mt-1 text-sm text-[#526358]">{t("ค้นหาบัญชี ตรวจข้อมูล และอนุมัติการเข้าใช้งาน")}</p>
         </div>
         {isAdmin && (
-          <Link href="/accounts/new" className={primary}>
-            เพิ่มเจ้าหน้าที่
-          </Link>
+          <Link href="/accounts/new" className={primary}>{t("เพิ่มเจ้าหน้าที่")}</Link>
         )}
       </header>
-      {feedback && !action && (
+      {feedback.text && !action && (
         <p
           role="status"
           className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm"
         >
-          {feedback}
+          {t(feedback.text)}{feedback.name && ` • ${feedback.name}`}
         </p>
       )}
       <section className={panel}>
-        <label className="block text-sm font-semibold">
-          ค้นหาเจ้าหน้าที่
-          <input
+        <label className="block text-sm font-semibold">{t("ค้นหาเจ้าหน้าที่")}<input
             ref={searchRef}
             type="search"
             className={control + " mt-1"}
-            placeholder="ชื่อ รหัสเจ้าหน้าที่ หรืออีเมล"
+            placeholder={t("ชื่อ รหัสเจ้าหน้าที่ หรืออีเมล")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        <div className="flex flex-wrap gap-2" aria-label="กรองสถานะ">
+        <div className="flex flex-wrap gap-2" aria-label={t("กรองสถานะ")}>
           {["ทั้งหมด", "รออนุมัติ", "ใช้งานอยู่", "ระงับสิทธิ์"].map((value) => (
             <button
               key={value}
@@ -273,7 +271,7 @@ export default function AccountsPage() {
               onClick={() => setFilter(value)}
               className={filter === value ? primary : secondary}
             >
-              {value} (
+              {value === "ระงับสิทธิ์" && language === "en" ? "Suspended" : t(value)} (
               {value === "ทั้งหมด"
                 ? profiles.length
                 : profiles.filter((p) => statusOf(p) === value).length}
@@ -287,33 +285,29 @@ export default function AccountsPage() {
           role="alert"
           className="rounded-lg border border-red-300 bg-red-50 p-4 space-y-3"
         >
-          <p>{error}</p>
+          <p>{t(error)}</p>
           <button
             type="button"
             className={secondary}
             onClick={() => void load()}
-          >
-            ลองโหลดใหม่
-          </button>
+          >{t("ลองโหลดใหม่")}</button>
         </div>
       )}
       {loading ? (
-        <p role="status">กำลังโหลดเจ้าหน้าที่…</p>
+        <p role="status">{t("กำลังโหลดเจ้าหน้าที่…")}</p>
       ) : (
         !error && (
           <section
-            aria-label="รายการเจ้าหน้าที่"
+            aria-label={t("รายการเจ้าหน้าที่")}
             className="rounded-xl border border-[#D4DCD5] bg-white"
           >
             {!visible.length ? (
               <p className="p-6 text-center text-sm text-[#526358]">
-                {profiles.length ? "ไม่พบเจ้าหน้าที่ตามเงื่อนไข" : "ยังไม่มีบัญชีเจ้าหน้าที่"}
+                {profiles.length ? t("ไม่พบเจ้าหน้าที่ตามเงื่อนไข") : t("ยังไม่มีบัญชีเจ้าหน้าที่")}
               </p>
             ) : (
               <>
-                <p className="border-b border-[#D4DCD5] px-4 py-3 text-sm text-[#526358]">
-                  พบ {visible.length} บัญชี
-                </p>
+                <p className="border-b border-[#D4DCD5] px-4 py-3 text-sm text-[#526358]">{t("พบ ")}{visible.length}{t(" บัญชี")}</p>
                 <ul className="divide-y divide-[#D4DCD5]">
                   {visible.map((p) => (
                     <li
@@ -326,10 +320,10 @@ export default function AccountsPage() {
                           <StatusBadge profile={p} />
                         </div>
                         <p className="break-words text-sm text-[#526358]">
-                          {p.employee_code} · {roleLabel(p)}
+                          {p.employee_code} · {t(roleLabel(p))}
                         </p>
                         <p className="break-words text-sm text-[#526358]">
-                          {p.department || p.email || "ไม่ได้ระบุหน่วยงาน"}
+                          {p.department || p.email || t("ไม่ได้ระบุหน่วยงาน")}
                         </p>
                       </div>
                       {isAdmin && (
@@ -342,8 +336,8 @@ export default function AccountsPage() {
                               onClick={() => open(p, "review")}
                             >
                               {p.role === "suspended"
-                                ? "คืนสิทธิ์"
-                                : "ตรวจสอบและอนุมัติ"}
+                                ? t("คืนสิทธิ์")
+                                : t("ตรวจสอบและอนุมัติ")}
                             </button>
                           )}
                           <button
@@ -351,9 +345,7 @@ export default function AccountsPage() {
                             className={secondary + " gap-2"}
                             onClick={() => open(p, "settings")}
                           >
-                            <Settings size={16} aria-hidden="true" />
-                            ตั้งค่าบัญชี
-                          </button>
+                            <Settings size={16} aria-hidden="true" />{t("ตั้งค่าบัญชี")}</button>
                         </div>
                       )}
                     </li>
@@ -386,39 +378,39 @@ export default function AccountsPage() {
                 <StatusBadge profile={action.profile} />
               </div>
               <p className="mt-1 break-words text-sm text-[#526358]">
-                {action.profile.employee_code} · {roleLabel(action.profile)}
+                {action.profile.employee_code} · {t(roleLabel(action.profile))}
               </p>
             </div>
           </div>
           {action.kind === "settings" ? (
             <div className="space-y-4">
-              {feedback && (
+              {feedback.text && (
                 <p
                   role="status"
                   className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900"
                 >
-                  {feedback}
+                  {t(feedback.text)}{feedback.name && ` • ${feedback.name}`}
                 </p>
               )}
               <section>
-                <h3 className="mb-2 text-sm font-semibold">ข้อมูลบัญชีและรหัสผ่าน</h3>
+                <h3 className="mb-2 text-sm font-semibold">{t("ข้อมูลบัญชีและรหัสผ่าน")}</h3>
                 <div className="divide-y divide-[#D4DCD5] overflow-hidden rounded-xl border border-[#D4DCD5]">
                   <SettingRow
                     icon={KeyRound}
-                    label="เปลี่ยนรหัสผ่าน"
-                    description="กำหนดรหัสผ่านใหม่สำหรับเข้าสู่ระบบ"
+                    label={t("เปลี่ยนรหัสผ่าน")}
+                    description={t("กำหนดรหัสผ่านใหม่สำหรับเข้าสู่ระบบ")}
                     onClick={() => open(action.profile, "password")}
                   />
                   <SettingRow
                     icon={Fingerprint}
-                    label="แก้ไขรหัสเจ้าหน้าที่"
-                    description="แก้รหัสที่ใช้ค้นหาและอ้างอิงเจ้าหน้าที่"
+                    label={t("แก้ไขรหัสเจ้าหน้าที่")}
+                    description={t("แก้รหัสที่ใช้ค้นหาและอ้างอิงเจ้าหน้าที่")}
                     onClick={() => open(action.profile, "code")}
                   />
                 </div>
               </section>
               <section>
-                <h3 className="mb-2 text-sm font-semibold">สิทธิ์และการลบบัญชี</h3>
+                <h3 className="mb-2 text-sm font-semibold">{t("สิทธิ์และการลบบัญชี")}</h3>
                 <div className="divide-y divide-[#D4DCD5] overflow-hidden rounded-xl border border-[#D4DCD5]">
                   {(action.profile.role === "pending_verification" ||
                     action.profile.role === "suspended") && (
@@ -426,10 +418,10 @@ export default function AccountsPage() {
                       icon={ShieldCheck}
                       label={
                         action.profile.role === "suspended"
-                          ? "คืนสิทธิ์"
-                          : "ตรวจสอบและอนุมัติ"
+                          ? t("คืนสิทธิ์")
+                          : t("ตรวจสอบและอนุมัติ")
                       }
-                      description="ตรวจข้อมูลและเลือกบทบาทก่อนเปิดใช้งาน"
+                      description={t("ตรวจข้อมูลและเลือกบทบาทก่อนเปิดใช้งาน")}
                       onClick={() => open(action.profile, "review")}
                     />
                   )}
@@ -437,15 +429,15 @@ export default function AccountsPage() {
                     action.profile.role !== "suspended" && (
                       <SettingRow
                         icon={ShieldOff}
-                        label="ระงับสิทธิ์"
-                        description="ปิดการเข้าใช้งานชั่วคราว"
+                        label={t("ระงับสิทธิ์")}
+                        description={t("ปิดการเข้าใช้งานชั่วคราว")}
                         onClick={() => open(action.profile, "suspend")}
                       />
                     )}
                   <SettingRow
                     icon={Trash2}
-                    label="ลบเจ้าหน้าที่"
-                    description="นำบัญชีออกจากการใช้งานและเก็บประวัติรายงาน"
+                    label={t("ลบเจ้าหน้าที่")}
+                    description={t("นำบัญชีออกจากการใช้งานและเก็บประวัติรายงาน")}
                     danger
                     onClick={() => open(action.profile, "delete")}
                   />
@@ -457,7 +449,7 @@ export default function AccountsPage() {
               kind="profile"
               id={action.profile.id}
               name={`${action.profile.full_name} (${action.profile.employee_code})`}
-              cancelLabel="ย้อนกลับ"
+              cancelLabel={t("ย้อนกลับ")}
               onBusyChange={setBusy}
               onClose={() => open(action.profile, "settings")}
               onDeleted={() => {
@@ -465,7 +457,7 @@ export default function AccountsPage() {
                   list.filter((p) => p.id !== action.profile.id),
                 );
                 setSelection(undefined);
-                setFeedback("ลบเจ้าหน้าที่ออกจากรายการใช้งานแล้ว ประวัติเดิมยังคงอยู่");
+                setFeedback({text:"ลบเจ้าหน้าที่ออกจากรายการใช้งานแล้ว ประวัติเดิมยังคงอยู่"});
               }}
               render={(form) => form}
             />
@@ -479,9 +471,7 @@ export default function AccountsPage() {
               aria-busy={busy}
             >
               {action.kind === "code" ? (
-                <label className="block text-sm font-semibold">
-                  รหัสเจ้าหน้าที่
-                  <input
+                <label className="block text-sm font-semibold">{t("รหัสเจ้าหน้าที่")}<input
                     className={control}
                     value={employeeCode}
                     onChange={(e) => setEmployeeCode(e.target.value)}
@@ -497,15 +487,11 @@ export default function AccountsPage() {
                   busy={busy}
                 />
               ) : action.kind === "suspend" ? (
-                <p>
-                  ระงับสิทธิ์ของ <strong>{action.profile.full_name}</strong> (
-                  {action.profile.employee_code})? บัญชีจะเข้าใช้งานไม่ได้จนกว่าจะคืนสิทธิ์
-                </p>
+                <p>{t("ระงับสิทธิ์ของ ")}<strong>{action.profile.full_name}</strong> (
+                  {action.profile.employee_code}{t(")? บัญชีจะเข้าใช้งานไม่ได้จนกว่าจะคืนสิทธิ์")}</p>
               ) : (
                 <>
-                  <label className="block text-sm font-semibold">
-                    รหัสผ่านใหม่
-                    <input
+                  <label className="block text-sm font-semibold">{t("รหัสผ่านใหม่")}<input
                       autoComplete="new-password"
                       type={showPassword ? "text" : "password"}
                       required
@@ -515,25 +501,19 @@ export default function AccountsPage() {
                       disabled={busy}
                     />
                   </label>
-                  <p className="text-sm text-[#526358]">
-                    อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก ตัวพิมพ์ใหญ่ และตัวเลข
-                  </p>
+                  <p className="text-sm text-[#526358]">{t("อย่างน้อย 8 ตัวอักษร มีตัวพิมพ์เล็ก ตัวพิมพ์ใหญ่ และตัวเลข")}</p>
                   <label className="flex min-h-11 items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={showPassword}
                       onChange={(e) => setShowPassword(e.target.checked)}
-                    />
-                    แสดงรหัสผ่าน
-                  </label>
+                    />{t("แสดงรหัสผ่าน")}</label>
                   <label className="flex min-h-11 items-center gap-2 text-sm">
                     <input
                       type="checkbox"
                       checked={notify}
                       onChange={(e) => setNotify(e.target.checked)}
-                    />
-                    แจ้งเจ้าหน้าที่ผ่านการแจ้งเตือนในระบบ
-                  </label>
+                    />{t("แจ้งเจ้าหน้าที่ผ่านการแจ้งเตือนในระบบ")}</label>
                 </>
               )}
               {actionError && (
@@ -541,7 +521,7 @@ export default function AccountsPage() {
                   role="alert"
                   className="rounded-lg bg-red-50 p-3 text-sm text-red-800"
                 >
-                  {actionError}
+                  {t(actionError)}
                 </p>
               )}
               <div className="flex flex-wrap justify-end gap-2">
@@ -550,19 +530,17 @@ export default function AccountsPage() {
                   type="button"
                   disabled={busy}
                   onClick={() => open(action.profile, "settings")}
-                >
-                  ย้อนกลับ
-                </button>
+                >{t("ย้อนกลับ")}</button>
                 <button className={primary} disabled={busy}>
                   {busy
-                    ? "กำลังบันทึก…"
+                    ? t("กำลังบันทึก…")
                     : action.kind === "code"
-                      ? "บันทึกรหัสเจ้าหน้าที่"
+                      ? t("บันทึกรหัสเจ้าหน้าที่")
                       : action.kind === "password"
-                        ? "บันทึกรหัสผ่าน"
+                        ? t("บันทึกรหัสผ่าน")
                         : action.kind === "suspend"
-                          ? "ยืนยันระงับสิทธิ์"
-                          : "อนุมัติเปิดใช้งาน"}
+                          ? t("ยืนยันระงับสิทธิ์")
+                          : t("อนุมัติเปิดใช้งาน")}
                 </button>
               </div>
             </form>

@@ -1,10 +1,12 @@
 "use client";
+import { useLanguage } from "@/lib/i18n/language";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { rakforestRepo } from "@/lib/supabase/repository";
 
 export default function RootEntryPage() {
+  const { t } = useLanguage();
   const router = useRouter();
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function RootEntryPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#112A1F] text-white">
       <div className="flex items-center gap-3 text-sm font-medium">
         <span className="h-3 w-3 rounded-full bg-[#40916C] animate-ping" />
-        <span>กำลังเข้าสู่ระบบปฏิบัติการ RakForest…</span>
+        <span>{t("กำลังเข้าสู่ระบบปฏิบัติการ RakForest…")}</span>
       </div>
     </main>
   );

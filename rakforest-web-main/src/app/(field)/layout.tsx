@@ -1,4 +1,5 @@
 "use client";
+import { useLanguage, LanguageToggle } from "@/lib/i18n/language";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -66,6 +67,7 @@ export default function FieldRangerLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { t } = useLanguage();
   const pathname = usePathname();
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -150,14 +152,14 @@ export default function FieldRangerLayout({
                   RakForest Field
                 </span>
                 <span className="font-mono-code text-[10px] text-[#95D5B2] block truncate">
-                  หน่วยลาดตระเวนภาคสนาม
+                  {t("หน่วยลาดตระเวนภาคสนาม")}
                 </span>
               </div>
             </Link>
 
             {/* Desktop & Tablet Horizontal Navigation (>= 768px) */}
             <nav
-              aria-label="เมนูเจ้าหน้าที่ภาคสนาม"
+              aria-label={t("เมนูเจ้าหน้าที่ภาคสนาม")}
               className="hidden md:flex items-center gap-1.5 ml-5"
             >
               {FIELD_NAV.map((item) => {
@@ -177,7 +179,7 @@ export default function FieldRangerLayout({
                       }`}
                     >
                       <Icon className="h-4 w-4" />
-                      <span>{item.label}</span>
+                      <span>{t(item.label)}</span>
                     </Link>
                   );
                 }
@@ -192,7 +194,7 @@ export default function FieldRangerLayout({
                     }`}
                   >
                     <Icon className="h-4 w-4" />
-                    <span>{item.label}</span>
+                    <span>{t(item.label)}</span>
                   </Link>
                 );
               })}
@@ -201,10 +203,11 @@ export default function FieldRangerLayout({
 
           {/* Right Compact Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <LanguageToggle />
             <FontScaleToggle variant="dark" />
 
             <span
-              title={isOnline ? "ออนไลน์พร้อมซิงก์" : "โหมดออฟไลน์ในป่า"}
+              title={isOnline ? t("ออนไลน์พร้อมซิงก์") : t("โหมดออฟไลน์ในป่า")}
               className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold whitespace-nowrap ${
                 isOnline
                   ? "bg-emerald-950/90 text-emerald-300 border border-emerald-700"
@@ -214,12 +217,12 @@ export default function FieldRangerLayout({
               {isOnline ? (
                 <>
                   <Wifi className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden sm:inline">ออนไลน์</span>
+                  <span className="hidden sm:inline">{t("ออนไลน์")}</span>
                 </>
               ) : (
                 <>
                   <WifiOff className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden xs:inline">ออฟไลน์</span>
+                  <span className="hidden xs:inline">{t("ออฟไลน์")}</span>
                 </>
               )}
             </span>
@@ -234,18 +237,18 @@ export default function FieldRangerLayout({
                 <RefreshCw
                   className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`}
                 />
-                <span>ซิงก์ ({pendingOfflineCount})</span>
+                <span>{t("ซิงก์ (")}{pendingOfflineCount})</span>
               </button>
             )}
 
             {profile && profile.role !== "field_ranger" && (
               <Link
                 href="/dashboard"
-                title="กลับศูนย์สั่งการ (Backoffice)"
+                title={t("กลับศูนย์สั่งการ (Backoffice)")}
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#40916C] bg-[#1B4332] px-2.5 text-xs font-semibold text-white hover:bg-[#2D6A4F] whitespace-nowrap"
               >
                 <Shield className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden sm:inline">ศูนย์สั่งการ</span>
+                <span className="hidden sm:inline">{t("ศูนย์สั่งการ")}</span>
               </Link>
             )}
           </div>
@@ -260,7 +263,7 @@ export default function FieldRangerLayout({
 
       {/* Mobile Bottom Navigation Bar (< 768px) with Prominent Center Red Record Button */}
       <nav
-        aria-label="เมนูด้านล่างสำหรับมือถือ"
+        aria-label={t("เมนูด้านล่างสำหรับมือถือ")}
         className="fixed inset-x-0 bottom-0 z-30 md:hidden border-t border-[#C6D1C8] bg-white/98 backdrop-blur-xs px-2 pt-1.5 pb-2 shadow-[0_-4px_16px_rgba(17,42,31,0.1)]"
       >
         <div className="grid grid-cols-5 items-end max-w-md mx-auto">
@@ -275,7 +278,7 @@ export default function FieldRangerLayout({
                 <div key={item.href} className="flex flex-col items-center -mt-5">
                   <Link
                     href={item.href}
-                    aria-label="บันทึกเสียงสดหรือแจ้งเหตุฉุกเฉิน"
+                    aria-label={t("บันทึกเสียงสดหรือแจ้งเหตุฉุกเฉิน")}
                     className={`flex h-14 w-14 items-center justify-center rounded-full bg-[#D62828] text-white shadow-lg border-4 border-white transition active:scale-95 ${
                       active ? "ring-2 ring-[#D62828] bg-red-700" : "hover:bg-red-700"
                     }`}
@@ -287,7 +290,7 @@ export default function FieldRangerLayout({
                       active ? "text-[#D62828]" : "text-[#B91C1C]"
                     }`}
                   >
-                    {item.shortLabel}
+                    {t(item.shortLabel)}
                   </span>
                 </div>
               );
@@ -304,7 +307,7 @@ export default function FieldRangerLayout({
                 }`}
               >
                 <Icon className="h-5 w-5 mb-0.5" />
-                <span className="truncate">{item.shortLabel}</span>
+                <span className="truncate">{t(item.shortLabel)}</span>
               </Link>
             );
           })}
