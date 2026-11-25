@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { rakforestRepo } from "@/lib/supabase/repository";
 import { getClassNameTh } from "@/lib/utils/risk";
+import { canAcknowledgeFieldTask, fieldTaskStage } from "@/lib/report-workflow";
+import ActionFeedback from "@/components/reports/ActionFeedback";
 import {
   ReportStatusBadge,
   RiskBadge,
@@ -38,6 +40,7 @@ export default function FieldRangerHomePage() {
   const [stations, setStations] = useState<SensorStation[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
 
   const loadAll = useCallback(async () => {
     const [p, z, st, rep] = await Promise.all([
@@ -58,16 +61,19 @@ export default function FieldRangerHomePage() {
 
   async function handleAcknowledge(reportId: string) {
     setBusyId(reportId);
+    setFailure(null);
     try {
       await rakforestRepo.acknowledgeFieldTask(reportId);
       await loadAll();
+    } catch (error) {
+      setFailure({ id: reportId, message: error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่" });
     } finally {
       setBusyId(null);
     }
   }
 
   const urgentStationTasks = reports.filter((r) =>
-    ["pending", "dispatched", "acknowledged"].includes(r.status)
+    canAcknowledgeFieldTask(r) || fieldTaskStage(r) === "in_progress"
   );
   const onlineStationCount = stations.filter((s) => s.status === "online").length;
   const alertZoneCount = zones.filter((z) => z.current_risk_level !== "green").length;
@@ -144,6 +150,7 @@ export default function FieldRangerHomePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-3">
             {urgentStationTasks.map((task) => {
+              const inProgress = fieldTaskStage(task) === "in_progress";
               const ai = task.report_audio?.[0]?.ai_classifications?.[0];
               const isRed = task.risk_level === "red";
               const isYellow = task.risk_level === "yellow";
@@ -228,8 +235,7 @@ export default function FieldRangerHomePage() {
 
                   {/* 1-Tap Action Buttons */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
-                    {(task.status === "dispatched" ||
-                      task.status === "pending") && (
+                    {canAcknowledgeFieldTask(task) && (
                       <button
                         type="button"
                         disabled={busyId === task.id}
@@ -242,21 +248,22 @@ export default function FieldRangerHomePage() {
                     )}
 
                     <Link
-                      href={`/field-reports/${task.id}`}
+                      href={`/field-reports/${task.id}${inProgress ? "#field-inspection" : ""}`}
                       className={`min-h-11 inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-bold transition ${
-                        task.status === "acknowledged"
+                        inProgress
                           ? "col-span-full bg-[#1B4332] text-white border-[#1B4332] hover:bg-[#2D6A4F]"
                           : "border-[#1B4332] bg-white text-[#1B4332] hover:bg-[#EBF2ED]"
                       }`}
                     >
                       <span>
-                        {task.status === "acknowledged"
+                        {inProgress
                           ? t("ส่งผลการตรวจสอบพื้นที่ & แนบรูปถ่าย")
                           : t("ฟังเสียง & ดูรายละเอียดงาน")}
                       </span>
                       <ArrowRight className="h-4 w-4 shrink-0" />
                     </Link>
                   </div>
+                  {failure?.id === task.id && <ActionFeedback result={{ tone: "error", message: failure.message }} />}
                 </article>
               );
             })}

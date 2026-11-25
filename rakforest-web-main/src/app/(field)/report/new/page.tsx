@@ -13,11 +13,11 @@ import {
   Radio,
   Send,
   Trash2,
-  WifiOff,
 } from "lucide-react";
 import { rakforestRepo } from "@/lib/supabase/repository";
 import { offlineReportQueue } from "@/lib/offline/report-queue";
 import AudioRecorder from "@/components/reports/AudioRecorder";
+import ActionFeedback from "@/components/reports/ActionFeedback";
 import type { ForestZone, SensorStation } from "@/types/database.types";
 
 const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
@@ -92,26 +92,25 @@ export default function FieldNewReportPage() {
 
     setSubmitting(true);
     setError("");
-
-    // Offline resilience: queue in IndexedDB if offline
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      await offlineReportQueue.enqueue({
-        stationId: stationId || null,
-        zoneId: zoneId || null,
-        lat,
-        lng,
-        description:
-          description.trim() || "รายงานเหตุการณ์ภาคสนาม (บันทึกขณะออฟไลน์)",
-        audioBlob: audioFile,
-        audioName: audioFile?.name ?? null,
-        audioType: audioFile?.type ?? null,
-      });
-      setSubmitting(false);
-      setQueuedSuccess(true);
-      return;
-    }
+    setQueuedSuccess(false);
 
     try {
+      if (!navigator.onLine) {
+        await offlineReportQueue.enqueue({
+          stationId: stationId || null,
+          zoneId: zoneId || null,
+          lat,
+          lng,
+          description:
+            description.trim() || "รายงานเหตุการณ์ภาคสนาม (บันทึกขณะออฟไลน์)",
+          audioBlob: audioFile,
+          audioName: audioFile?.name ?? null,
+          audioType: audioFile?.type ?? null,
+        });
+        setQueuedSuccess(true);
+        return;
+      }
+
       const { report } = await rakforestRepo.createReportWithAudio({
         sourceType: "field_patrol",
         stationId: stationId || null,
@@ -140,22 +139,6 @@ export default function FieldNewReportPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-[#14241B]">{t("บันทึกเสียงสดและแจ้งเหตุการณ์ผิดปกติจากพื้นที่ป่า")}</h1>
         <p className="text-xs sm:text-sm text-[#526358]">{t("ส่งไฟล์เสียงเข้าโมเดล AI AudioCNN เพื่อประเมินความเสี่ยงและแจ้งเตือนศูนย์สั่งการส่วนกลางทันที (รองรับการเก็บคิวออฟไลน์เมื่อไม่มีสัญญาณ)")}</p>
       </div>
-
-      {queuedSuccess && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-xs font-semibold text-amber-950 flex items-center gap-2">
-          <WifiOff className="h-5 w-5 shrink-0" />
-          <span>{t("บันทึกใบงานและไฟล์เสียงลงในคิวออฟไลน์ของอุปกรณ์แล้ว ระบบจะส่งขึ้นเซิร์ฟเวอร์อัตโนมัติเมื่อกลับมามีสัญญาณอินเทอร์เน็ต")}</span>
-        </div>
-      )}
-
-      {error && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs font-semibold text-red-800"
-        >
-          {t(error)}
-        </div>
-      )}
 
       {/* Responsive 2-Column Workspace on Tablet/Desktop (>=1024px), 1-Column on Mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -333,7 +316,7 @@ export default function FieldNewReportPage() {
           </section>
 
           {/* Submit Action Bar (Sticky on mobile, inline card on desktop) */}
-          <div className="sticky bottom-16 md:static z-20 rounded-lg border border-[#1B4332] bg-white p-3 shadow-md md:shadow-none">
+          <div className="sticky bottom-16 md:static z-20 space-y-2 rounded-lg border border-[#1B4332] bg-white p-3 shadow-md md:shadow-none">
             <button
               type="submit"
               disabled={submitting}
@@ -346,6 +329,13 @@ export default function FieldNewReportPage() {
                   : t("ส่งรายงานและวิเคราะห์เสียงด้วย AI ทันที")}
               </span>
             </button>
+            <ActionFeedback result={error
+              ? { tone: "error", message: error }
+              : submitting
+                ? { tone: "pending", message: audioFile ? "กำลังอัปโหลดไฟล์และวิเคราะห์เสียง…" : "กำลังส่งรายงาน…" }
+                : queuedSuccess
+                  ? { tone: "warning", message: "บันทึกใบงานและไฟล์เสียงลงในคิวออฟไลน์ของอุปกรณ์แล้ว ระบบจะส่งขึ้นเซิร์ฟเวอร์อัตโนมัติเมื่อกลับมามีสัญญาณอินเทอร์เน็ต" }
+                  : null} />
           </div>
         </div>
       </div>

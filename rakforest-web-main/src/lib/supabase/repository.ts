@@ -5,6 +5,7 @@ import { readZones,readStations,writeZone,writeStation } from "@/lib/directory/s
 import { listAccounts, createAccountRecord, requireAccountAdmin, changeAccountRole, resetAccountPassword } from "@/lib/accounts/service";
 import type { CreateAccountInput } from "@/lib/accounts/validation";
 import type { AudioModelId } from "@/lib/ml-contract";
+import { canAcknowledgeFieldTask, canCloseReport, canDispatchFieldTask, fieldTaskStage, incidentDecision, type BackofficeReportAction } from "@/lib/report-workflow";
 import {
   INITIAL_NOTIFICATION_LOGS,
   INITIAL_NOTIFICATION_RULES,
@@ -22,7 +23,6 @@ import type {
   NotificationRule,
   Profile,
   ReportRecord,
-  ReportStatus,
   RiskLevel,
   SensorStation,
   SourceType,
@@ -113,6 +113,79 @@ function enrichReports(
     reporter: r.reporter ?? profiles.find((p) => p.id === r.reporter_id) ?? null,
     assignee: r.assignee ?? profiles.find((p) => p.id === r.assigned_to) ?? null,
   }));
+}
+
+async function uploadReportMedia(
+  supabase: ReturnType<typeof createClient>,
+  bucket: "audio-reports" | "evidence-files",
+  path: string,
+  file: File,
+): Promise<string> {
+  try {
+    const storage = supabase.storage.from(bucket);
+    const { error } = await storage.upload(path, file, { upsert: true });
+    if (!error) return storage.getPublicUrl(path).data.publicUrl;
+  } catch {
+    // Preserve the local preview when Storage is unavailable.
+  }
+  return typeof window === "undefined" ? "" : URL.createObjectURL(file);
+}
+
+function uploadReportEvidence(
+  supabase: ReturnType<typeof createClient>,
+  files: File[],
+  report: { id: string; code: string; uploaderId: string; uploadedAt: string },
+): Promise<NonNullable<ReportRecord["report_evidence"]>> {
+  return Promise.all(files.map(async (file) => {
+    const id = crypto.randomUUID();
+    const fileUrl = await uploadReportMedia(supabase, "evidence-files", `${report.code}/${id}-${file.name}`, file);
+    return {
+      id,
+      report_id: report.id,
+      file_url: fileUrl,
+      file_name: file.name,
+      file_type: file.type.startsWith("video/") ? "video" : "image",
+      uploaded_by: report.uploaderId,
+      uploaded_at: report.uploadedAt,
+    };
+  }));
+}
+
+async function classifyReportAudio(file: File, requestId: string, stationId: string, modelId: AudioModelId) {
+  const formData = new FormData();
+  formData.set("audio", file);
+  formData.set("requestId", requestId);
+  formData.set("stationId", stationId);
+  formData.set("modelId", modelId);
+  try {
+    const response = await fetch("/api/classify-audio", { method: "POST", body: formData });
+    if (response.ok) {
+      return await response.json() as {
+        rawResponse: AIRawResponse;
+        predictedLabel: string;
+        confidence: number;
+        riskLevel: RiskLevel;
+        processedAt?: string;
+      };
+    }
+  } catch {
+    // A report can be saved for manual review when analysis is unavailable.
+  }
+  return null;
+}
+
+async function updateReportWorkflow(
+  supabase: ReturnType<typeof createClient>,
+  current: ReportRecord,
+  changes: Partial<ReportRecord>,
+  message = "สถานะรายงานเปลี่ยนแล้วหรือบันทึกไม่สำเร็จ กรุณาโหลดใหม่",
+) {
+  const request = supabase.from("reports").update(changes).eq("id", current.id).eq("status", current.status);
+  const { data, error } = await (current.updated_at
+    ? request.eq("updated_at", current.updated_at)
+    : request.is("updated_at", null)).select("id,updated_at").single();
+  if (error || !data) throw new Error(message);
+  return data.updated_at ?? changes.updated_at;
 }
 
 export const rakforestRepo = {
@@ -245,7 +318,6 @@ export const rakforestRepo = {
   // ==========================================================================
   async getReports(): Promise<ReportRecord[]> {
     const supabase = createClient();
-    const cache = loadLocalCache();
 
     try {
       const { data, error } = await supabase
@@ -262,6 +334,7 @@ export const rakforestRepo = {
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
+        const cache = loadLocalCache();
         const enriched = enrichReports(
           data as ReportRecord[],
           cache.zones,
@@ -276,6 +349,7 @@ export const rakforestRepo = {
       // fallback
     }
 
+    const cache = loadLocalCache();
     return enrichReports(
       cache.reports,
       cache.zones,
@@ -324,84 +398,26 @@ export const rakforestRepo = {
     const reportCode = `RF-${datePart}-${seq}`;
     const reportId = crypto.randomUUID();
 
-    let audioFileUrl = "";
-    if (params.audioFile) {
-      const storagePath = `${reportCode}/${Date.now()}-${params.audioFile.name}`;
-      try {
-        const { error: uploadErr } = await supabase.storage
-          .from("audio-reports")
-          .upload(storagePath, params.audioFile, { upsert: true });
-        if (!uploadErr) {
-          const { data: pub } = supabase.storage
-            .from("audio-reports")
-            .getPublicUrl(storagePath);
-          audioFileUrl = pub.publicUrl;
-        }
-      } catch {
-        // Fallback to local object URL
-      }
-      if (!audioFileUrl && typeof window !== "undefined") {
-        audioFileUrl = URL.createObjectURL(params.audioFile);
-      }
-    }
+    const [audioFileUrl, evidenceItems, analysis] = await Promise.all([
+      params.audioFile
+        ? uploadReportMedia(supabase, "audio-reports", `${reportCode}/${reportId}-${params.audioFile.name}`, params.audioFile)
+        : "",
+      uploadReportEvidence(supabase, params.evidenceFiles ?? [], {
+        id: reportId,
+        code: reportCode,
+        uploaderId: profile.id,
+        uploadedAt: now.toISOString(),
+      }),
+      params.audioFile
+        ? classifyReportAudio(params.audioFile, reportCode, station?.station_code ?? "FIELD-GPS", params.modelId ?? "cnn_sigmoid")
+        : null,
+    ]);
 
-    // Call /api/classify-audio with the selected checkpoint (or explicit mock fallback)
-    let aiRaw: AIRawResponse | null = null;
-    let predictedLabel = "";
-    let confidence = 0;
-    let riskLevel: RiskLevel = "green";
-    let processedAt: string | undefined;
-
-    if (params.audioFile) {
-      const formData = new FormData();
-      formData.set("audio", params.audioFile);
-      formData.set("requestId", reportCode);
-      formData.set("stationId", station?.station_code ?? "FIELD-GPS");
-      formData.set("modelId", params.modelId ?? "cnn_sigmoid");
-      try {
-        const res = await fetch("/api/classify-audio", { method: "POST", body: formData });
-        if (res.ok) {
-          const data = await res.json();
-          aiRaw = data.rawResponse as AIRawResponse;
-          predictedLabel = data.predictedLabel;
-          confidence = data.confidence;
-          riskLevel = data.riskLevel;
-          processedAt = data.processedAt;
-        }
-      } catch {
-        // A report can be saved for manual review when analysis is unavailable.
-      }
-    }
-
-    // Upload evidence images if provided
-    const evidenceItems: NonNullable<ReportRecord["report_evidence"]> = [];
-    for (const file of params.evidenceFiles ?? []) {
-      let evUrl = "";
-      try {
-        const path = `${reportCode}/${Date.now()}-${file.name}`;
-        const { error: evErr } = await supabase.storage
-          .from("evidence-files")
-          .upload(path, file, { upsert: true });
-        if (!evErr) {
-          evUrl = supabase.storage.from("evidence-files").getPublicUrl(path).data
-            .publicUrl;
-        }
-      } catch {
-        // ignore
-      }
-      if (!evUrl && typeof window !== "undefined") {
-        evUrl = URL.createObjectURL(file);
-      }
-      evidenceItems.push({
-        id: crypto.randomUUID(),
-        report_id: reportId,
-        file_url: evUrl,
-        file_name: file.name,
-        file_type: file.type.startsWith("video/") ? "video" : "image",
-        uploaded_by: profile?.id ?? null,
-        uploaded_at: now.toISOString(),
-      });
-    }
+    const aiRaw = analysis?.rawResponse ?? null;
+    const predictedLabel = analysis?.predictedLabel ?? "";
+    const confidence = analysis?.confidence ?? 0;
+    const riskLevel = analysis?.riskLevel ?? "green";
+    const processedAt = analysis?.processedAt;
 
     const audioId = crypto.randomUUID();
     const classification = aiRaw && processedAt ? {
@@ -540,7 +556,7 @@ export const rakforestRepo = {
     assigneeId: string;
     dispatchNote: string;
     sendTelegram?: boolean;
-  }): Promise<ReportRecord> {
+  }): Promise<{ report: ReportRecord; telegram: "disabled" | "sent" | "failed" }> {
     const supabase = createClient();
     const cache = loadLocalCache();
     const profile = await this.getCurrentProfile();
@@ -550,14 +566,19 @@ export const rakforestRepo = {
     const idx = cache.reports.findIndex((r) => r.id === params.reportId);
     if (idx === -1) throw new Error("ไม่พบรายการรายงานนี้");
 
-    const updated: ReportRecord = {
-      ...cache.reports[idx],
-      status: "dispatched",
+    const current = cache.reports[idx];
+    if (!canDispatchFieldTask(current)) throw new Error("ภารกิจนี้ส่งผลแล้วหรือปิดงานแล้ว");
+    const sameAssignee = current.assigned_to === params.assigneeId;
+    const changes = {
+      status: incidentDecision(current.status) ?? (sameAssignee && fieldTaskStage(current) === "in_progress" ? "acknowledged" : "dispatched"),
       assigned_to: params.assigneeId,
+      acknowledged_at: sameAssignee ? current.acknowledged_at : null,
       dispatch_note: params.dispatchNote.trim(),
       dispatched_at: now,
       updated_at: now,
-    };
+    } satisfies Partial<ReportRecord>;
+    const updatedAt = await updateReportWorkflow(supabase, current, changes, "มอบหมายงานไม่สำเร็จ เจ้าหน้าที่อาจถูกลบหรือข้อมูลเปลี่ยนแล้ว กรุณาโหลดใหม่");
+    const updated = { ...current, ...changes, updated_at: updatedAt ?? now };
     cache.reports[idx] = updated;
 
     cache.auditLogs.unshift({
@@ -574,11 +595,9 @@ export const rakforestRepo = {
       created_at: now,
     });
 
-    const {data: saved,error: dispatchError}=await supabase.from("reports").update({status:"dispatched",assigned_to:params.assigneeId,dispatch_note:params.dispatchNote.trim(),dispatched_at:now,updated_at:now}).eq("id",params.reportId).select("id").single();
-    if(dispatchError||!saved)throw new Error("มอบหมายงานไม่สำเร็จ เจ้าหน้าที่อาจถูกลบหรือข้อมูลเปลี่ยนแล้ว กรุณาโหลดใหม่");
-
     saveLocalCache(cache);
 
+    let telegram: "disabled" | "sent" | "failed" = "disabled";
     if (params.sendTelegram !== false) {
       const station = cache.stations.find((s) => s.id === updated.station_id);
       const ranger = cache.profiles.find((p) => p.id === params.assigneeId);
@@ -588,7 +607,7 @@ export const rakforestRepo = {
       const topConf =
         updated.report_audio?.[0]?.ai_classifications?.[0]?.confidence ?? 0.85;
 
-      await this.dispatchTelegramNotification({
+      const notification = await this.dispatchTelegramNotification({
         reportId: updated.id,
         reportCode: updated.report_code,
         riskLevel: updated.risk_level,
@@ -599,9 +618,13 @@ export const rakforestRepo = {
           : `${updated.lat.toFixed(4)}, ${updated.lng.toFixed(4)}`,
         note: `มอบหมายให้ ${ranger?.full_name ?? "เจ้าหน้าที่ภาคสนาม"}: ${params.dispatchNote}`,
       });
+      telegram = notification?.status === "sent" ? "sent" : "failed";
     }
 
-    return enrichReports([updated], cache.zones, cache.stations, cache.profiles)[0];
+    return {
+      report: enrichReports([updated], cache.zones, cache.stations, cache.profiles)[0],
+      telegram,
+    };
   },
 
   async acknowledgeFieldTask(reportId: string): Promise<ReportRecord> {
@@ -614,12 +637,15 @@ export const rakforestRepo = {
     const idx = cache.reports.findIndex((r) => r.id === reportId);
     if (idx === -1) throw new Error("ไม่พบงานนี้");
 
-    cache.reports[idx] = {
-      ...cache.reports[idx],
-      status: "acknowledged",
+    const current = cache.reports[idx];
+    if (!canAcknowledgeFieldTask(current)) throw new Error("ภารกิจนี้ไม่อยู่ในขั้นรับทราบงาน");
+    const changes = {
+      status: incidentDecision(current.status) ?? "acknowledged",
       acknowledged_at: now,
       updated_at: now,
-    };
+    } satisfies Partial<ReportRecord>;
+    const updatedAt = await updateReportWorkflow(supabase, current, changes);
+    cache.reports[idx] = { ...current, ...changes, updated_at: updatedAt ?? now };
 
     cache.auditLogs.unshift({
       id: crypto.randomUUID(),
@@ -631,19 +657,6 @@ export const rakforestRepo = {
       details: {},
       created_at: now,
     });
-
-    try {
-      await supabase
-        .from("reports")
-        .update({
-          status: "acknowledged",
-          acknowledged_at: now,
-          updated_at: now,
-        })
-        .eq("id", reportId);
-    } catch {
-      // local cache updated
-    }
 
     saveLocalCache(cache);
     return enrichReports(
@@ -670,43 +683,27 @@ export const rakforestRepo = {
     if (idx === -1) throw new Error("ไม่พบงานนี้");
 
     const current = cache.reports[idx];
-    const addedEvidence: NonNullable<ReportRecord["report_evidence"]> = [];
+    if (fieldTaskStage(current) !== "in_progress") throw new Error("ส่งผลตรวจได้เมื่อภารกิจกำลังดำเนินการ");
+    const addedEvidence = await uploadReportEvidence(supabase, params.evidenceFiles ?? [], {
+      id: current.id,
+      code: current.report_code,
+      uploaderId: profile.id,
+      uploadedAt: now,
+    });
 
-    for (const file of params.evidenceFiles ?? []) {
-      let url = "";
-      try {
-        const path = `${current.report_code}/field-${Date.now()}-${file.name}`;
-        const { error } = await supabase.storage
-          .from("evidence-files")
-          .upload(path, file, { upsert: true });
-        if (!error) {
-          url = supabase.storage.from("evidence-files").getPublicUrl(path).data
-            .publicUrl;
-        }
-      } catch {
-        // ignore
-      }
-      if (!url && typeof window !== "undefined") {
-        url = URL.createObjectURL(file);
-      }
-      addedEvidence.push({
-        id: crypto.randomUUID(),
-        report_id: current.id,
-        file_url: url,
-        file_name: file.name,
-        file_type: file.type.startsWith("video/") ? "video" : "image",
-        uploaded_by: profile?.id ?? null,
-        uploaded_at: now,
-      });
-    }
-
-    const updated: ReportRecord = {
-      ...current,
-      status: "submitted",
+    const changes = {
+      status: incidentDecision(current.status) ?? "submitted",
       field_outcome: params.outcome,
       field_notes: params.fieldNotes.trim(),
       submitted_at: now,
+      reviewed_at: null,
       updated_at: now,
+    } satisfies Partial<ReportRecord>;
+    const updatedAt = await updateReportWorkflow(supabase, current, changes);
+    const updated = {
+      ...current,
+      ...changes,
+      updated_at: updatedAt ?? now,
       report_evidence: [...(current.report_evidence ?? []), ...addedEvidence],
     };
     cache.reports[idx] = updated;
@@ -722,28 +719,13 @@ export const rakforestRepo = {
       created_at: now,
     });
 
-    try {
-      await supabase
-        .from("reports")
-        .update({
-          status: "submitted",
-          field_outcome: params.outcome,
-          field_notes: params.fieldNotes.trim(),
-          submitted_at: now,
-          updated_at: now,
-        })
-        .eq("id", params.reportId);
-    } catch {
-      // local cache updated
-    }
-
     saveLocalCache(cache);
     return enrichReports([updated], cache.zones, cache.stations, cache.profiles)[0];
   },
 
   async reviewReportStatus(params: {
     reportId: string;
-    status: ReportStatus;
+    action: BackofficeReportAction;
     reviewNotes: string;
   }): Promise<ReportRecord> {
     const supabase = createClient();
@@ -755,46 +737,47 @@ export const rakforestRepo = {
     const idx = cache.reports.findIndex((r) => r.id === params.reportId);
     if (idx === -1) throw new Error("ไม่พบรายการรายงาน");
 
-    const updated: ReportRecord = {
-      ...cache.reports[idx],
-      status: params.status,
-      reviewed_by: profile?.id ?? null,
-      reviewed_at: now,
+    const current = cache.reports[idx];
+    const { action } = params;
+    if (current.status === "closed") throw new Error("ปิดงานแล้ว");
+    if (action === "closed" && !canCloseReport(current)) throw new Error("ตรวจผลภาคสนามก่อนปิดงาน");
+    if (action === "field_reviewed" && fieldTaskStage(current) !== "submitted") throw new Error("ยังไม่มีผลภาคสนามที่รอตรวจ");
+
+    const changes = {
+      status: action === "field_reviewed" ? current.status : action,
+      ...(current.status === "acknowledged" && !current.acknowledged_at && {
+        acknowledged_at: current.updated_at ?? now,
+      }),
+      ...(current.status === "submitted" && !current.submitted_at && {
+        submitted_at: current.updated_at ?? now,
+      }),
+      ...(action === "field_reviewed" && {
+        reviewed_at: now,
+        reviewed_by: profile.id,
+        submitted_at: current.submitted_at ?? current.updated_at ?? now,
+      }),
       review_notes: params.reviewNotes.trim(),
       updated_at: now,
-    };
+    } satisfies Partial<ReportRecord>;
+    const updatedAt = await updateReportWorkflow(supabase, current, changes);
+    const updated = { ...current, ...changes, updated_at: updatedAt ?? now };
     cache.reports[idx] = updated;
 
     cache.auditLogs.unshift({
       id: crypto.randomUUID(),
       actor_id: profile?.id ?? null,
       actor_name: profile?.full_name ?? "เจ้าหน้าที่ส่วนกลาง",
-      action:
-        params.status === "confirmed"
-          ? "confirm_report"
-          : params.status === "rejected"
-            ? "reject_report"
-            : "close_report",
+      action: {
+        confirmed: "confirm_report",
+        rejected: "reject_report",
+        field_reviewed: "review_field_report",
+        closed: "close_report",
+      }[action],
       target_table: "reports",
       target_id: updated.id,
-      details: { status: params.status, review_notes: params.reviewNotes },
+      details: { status: updated.status, review_notes: params.reviewNotes },
       created_at: now,
     });
-
-    try {
-      await supabase
-        .from("reports")
-        .update({
-          status: params.status,
-          reviewed_by: profile?.id ?? null,
-          reviewed_at: now,
-          review_notes: params.reviewNotes.trim(),
-          updated_at: now,
-        })
-        .eq("id", params.reportId);
-    } catch {
-      // local cache updated
-    }
 
     saveLocalCache(cache);
     return enrichReports([updated], cache.zones, cache.stations, cache.profiles)[0];
@@ -804,15 +787,15 @@ export const rakforestRepo = {
   // ACCOUNTS & VERIFICATION STEPPER
   // ==========================================================================
   async getProfiles(options: { strict?: boolean } = {}): Promise<Profile[]> {
-    const cache = loadLocalCache();
     try {
       const profiles = await listAccounts();
+      const cache = loadLocalCache();
       cache.profiles = profiles;
       saveLocalCache(cache);
       return profiles;
     } catch (error) {
       if (options.strict) throw error;
-      return cache.profiles.filter(p=>!p.deleted_at);
+      return loadLocalCache().profiles.filter(p=>!p.deleted_at);
     }
   },
 

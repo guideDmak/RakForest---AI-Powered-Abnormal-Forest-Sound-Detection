@@ -16,6 +16,8 @@ import {
 import { rakforestRepo } from "@/lib/supabase/repository";
 import AudioWaveformPlayer from "@/components/reports/AudioWaveformPlayer";
 import AIClassificationCard from "@/components/reports/AIClassificationCard";
+import ActionFeedback, { type ActionResult } from "@/components/reports/ActionFeedback";
+import { canCloseReport, canDispatchFieldTask, fieldTaskStage, fieldTaskStatusLabel, type BackofficeReportAction } from "@/lib/report-workflow";
 import {
   FieldOutcomeBadge,
   ReportStatusBadge,
@@ -27,6 +29,13 @@ import type { Profile, ReportRecord } from "@/types/database.types";
 const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
   ssr: false,
 });
+
+const reviewActions = {
+  confirmed: { label: "ยืนยันเหตุจริง", note: "ยืนยันเหตุผิดปกติจริงจากหลักฐานที่ตรวจสอบ", success: "บันทึกผลยืนยันเหตุจริงแล้ว" },
+  rejected: { label: "ปฏิเสธ (เสียงรบกวน)", note: "สัญญาณรบกวนหรือเสียงธรรมชาติ ไม่พบการกระทำผิด", success: "บันทึกผลปฏิเสธรายงานแล้ว" },
+  field_reviewed: { label: "ตรวจผลภาคสนามแล้ว", note: "ตรวจสอบผลการลงพื้นที่แล้ว", success: "ตรวจผลแล้ว รอปิดงาน" },
+  closed: { label: "ปิดงาน", note: "ดำเนินการที่เกี่ยวข้องเสร็จครบและปิดงาน", success: "ปิดงานแล้ว" },
+} satisfies Record<BackofficeReportAction, { label: string; note: string; success: string }>;
 
 export default function BackofficeReportDetailPage({
   params,
@@ -43,11 +52,10 @@ export default function BackofficeReportDetailPage({
   );
   const [sendTelegram, setSendTelegram] = useState(true);
   const [reviewNotes, setReviewNotes] = useState("");
-  const [pendingDecision, setPendingDecision] = useState<
-    "confirmed" | "rejected" | "closed" | null
-  >(null);
+  const [pendingDecision, setPendingDecision] = useState<BackofficeReportAction | null>(null);
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState("");
+  const [dispatchFeedback, setDispatchFeedback] = useState<ActionResult | null>(null);
+  const [reviewFeedback, setReviewFeedback] = useState<ActionResult | null>(null);
 
   const loadDetail = useCallback(async () => {
     const [rep, profiles] = await Promise.all([
@@ -84,51 +92,63 @@ export default function BackofficeReportDetailPage({
 
   const audio = report.report_audio?.[0];
   const ai = audio?.ai_classifications?.[0];
+  const stage = fieldTaskStage(report);
+  const workflowLabel = fieldTaskStatusLabel(report);
+  const canClose = canCloseReport(report);
 
   async function handleDispatch() {
     if (!report || !assigneeId) return;
     setBusy(true);
-    setFeedback("");
+    setDispatchFeedback({ tone: "pending", message: "กำลังบันทึกการมอบหมายงาน…" });
     try {
-      const updated = await rakforestRepo.dispatchToFieldRanger({
+      const result = await rakforestRepo.dispatchToFieldRanger({
         reportId: report.id,
         assigneeId,
         dispatchNote,
         sendTelegram,
       });
-      setReport(updated);
-      setFeedback(
-        "บันทึกการมอบหมายงานภาคสนามและส่งแจ้งเตือนเข้า Telegram เรียบร้อยแล้ว"
-      );
+      setReport(result.report);
+      setDispatchFeedback({
+        tone: result.telegram === "failed" ? "warning" : "success",
+        message: result.telegram === "sent"
+          ? "บันทึกการมอบหมายงานภาคสนามและส่งแจ้งเตือนเข้า Telegram เรียบร้อยแล้ว"
+          : result.telegram === "failed"
+            ? "บันทึกการมอบหมายงานแล้ว แต่ส่ง Telegram ไม่สำเร็จ"
+            : "บันทึกการมอบหมายงานภาคสนามแล้ว",
+      });
+    } catch (error) {
+      setDispatchFeedback({ tone: "error", message: error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่" });
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleReview(
-    newStatus: "confirmed" | "rejected" | "closed"
-  ) {
+  async function handleReview(action: BackofficeReportAction) {
     if (!report) return;
     setBusy(true);
-    setFeedback("");
+    setReviewFeedback({ tone: "pending", message: "กำลังบันทึกผล…" });
     try {
       const updated = await rakforestRepo.reviewReportStatus({
         reportId: report.id,
-        status: newStatus,
-        reviewNotes:
-          reviewNotes.trim() ||
-          (newStatus === "confirmed"
-            ? "ยืนยันเหตุผิดปกติจริงจากหลักฐานเสียงและผลตรวจภาคสนาม"
-            : newStatus === "rejected"
-              ? "สัญญาณรบกวนหรือเสียงธรรมชาติ ไม่พบการกระทำผิด"
-              : "ตรวจสอบและดำเนินการเสร็จสิ้น ปิดงาน"),
+        action,
+        reviewNotes: reviewNotes.trim() || reviewActions[action].note,
       });
       setReport(updated);
       setPendingDecision(null);
-      setFeedback(newStatus === "confirmed" ? "บันทึกผลยืนยันเหตุจริงแล้ว" : newStatus === "rejected" ? "บันทึกผลปฏิเสธรายงานแล้ว" : "ปิดงานแล้ว");
+      setReviewFeedback({
+        tone: "success",
+        message: reviewActions[action].success,
+      });
+    } catch (error) {
+      setReviewFeedback({ tone: "error", message: error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่" });
     } finally {
       setBusy(false);
     }
+  }
+
+  function openReview(action: BackofficeReportAction) {
+    setReviewFeedback(null);
+    setPendingDecision(action);
   }
 
   return (
@@ -178,16 +198,6 @@ export default function BackofficeReportDetailPage({
           </p>
         </div>
       </div>
-
-      {feedback && (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900"
-        >
-          <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0" />
-          <span>{t(feedback)}</span>
-        </div>
-      )}
 
       {/* Main 12-Col Grid: Left (Audio Waveform + AI 9-Class Breakdown + Map), Right (Dispatch + Field Result + Verification) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -291,17 +301,18 @@ export default function BackofficeReportDetailPage({
 
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !assigneeId || !canDispatchFieldTask(report)}
               onClick={handleDispatch}
               className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#1B4332] px-4 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-[#2D6A4F] disabled:opacity-50 transition"
             >
               <Send className="h-4 w-4" />
               <span>
-                {report.status === "pending"
+                {!report.dispatched_at && report.status !== "dispatched"
                   ? t("มอบหมายงานภาคสนาม & แจ้งเตือน Telegram")
                   : t("อัปเดตคำสั่งการ & ส่งแจ้งเตือนซ้ำ")}
               </span>
             </button>
+            <ActionFeedback result={dispatchFeedback} />
           </section>
 
           {/* Panel B: Field Ranger Inspection Result & Evidence Gallery */}
@@ -329,9 +340,9 @@ export default function BackofficeReportDetailPage({
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-[#C6D1C8] bg-[#F8FAF8] p-4 text-xs text-[#526358]">
-                {report.status === "acknowledged"
+                {stage === "in_progress"
                   ? t("เจ้าหน้าที่ภาคสนามรับทราบงานแล้ว กำลังเดินทางเข้าตรวจสอบพื้นที่รอบเสาไมค์")
-                  : report.status === "dispatched"
+                  : report.dispatched_at || report.status === "dispatched"
                     ? t("ส่งใบงานแล้ว รอเจ้าหน้าที่ภาคสนามกดรับทราบงานและลงพื้นที่")
                     : t("ยังไม่มีผลตรวจภาคสนาม (คุณสามารถสลับไปโหมดภาคสนามเพื่อจำลองการรับงานและส่งผลได้ทันที)")}
                 <div className="mt-2">
@@ -394,8 +405,8 @@ export default function BackofficeReportDetailPage({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => setPendingDecision("confirmed")}
+                disabled={busy || stage === "closed"}
+                onClick={() => openReview("confirmed")}
                 className="min-h-11 flex items-center justify-center gap-1.5 rounded-lg bg-[#D62828] px-3 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
               >
                 <ShieldCheck className="h-4 w-4 shrink-0" />
@@ -404,8 +415,8 @@ export default function BackofficeReportDetailPage({
 
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => setPendingDecision("rejected")}
+                disabled={busy || stage === "closed"}
+                onClick={() => openReview("rejected")}
                 className="min-h-11 flex items-center justify-center gap-1.5 rounded-lg border border-[#C6D1C8] bg-white px-3 py-2.5 text-xs sm:text-sm font-semibold text-[#526358] hover:bg-slate-100 disabled:opacity-50"
               >
                 <XCircle className="h-4 w-4 shrink-0" />
@@ -414,14 +425,29 @@ export default function BackofficeReportDetailPage({
 
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => setPendingDecision("closed")}
+                disabled={busy || !canClose}
+                onClick={() => openReview("closed")}
                 className="min-h-11 flex items-center justify-center gap-1.5 rounded-lg bg-[#2D8A3E] px-3 py-2.5 text-xs sm:text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>{t("ตรวจแล้ว & ปิดงาน")}</span>
+                <span>{t("ปิดงาน")}</span>
               </button>
             </div>
+            {workflowLabel && <p className="text-sm font-semibold text-[#1B4332]">{t(workflowLabel)}</p>}
+            {stage === "submitted" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => openReview("field_reviewed")}
+                className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-[#1B4332] px-4 py-2 text-sm font-semibold text-[#1B4332] hover:bg-[#EBF2ED] disabled:opacity-50"
+              >
+                <CheckCircle2 aria-hidden="true" className="size-4" />
+                {t(reviewActions.field_reviewed.label)}
+              </button>
+            )}
+            {!canClose && stage !== "closed" && (
+              <p className="text-xs text-[#526358]">{t("ตรวจผลภาคสนามก่อนปิดงาน")}</p>
+            )}
 
             {/* Confirmation Dialog Box to prevent accidental clicks */}
             {pendingDecision && (
@@ -434,23 +460,12 @@ export default function BackofficeReportDetailPage({
                   <p
                     id="confirm-decision-title"
                     className="text-sm font-bold text-[#14241B]"
-                  >{t("ยืนยันการเปลี่ยนสถานะรายงานเป็น:")}{" "}
-                    <span
-                      className={
-                        pendingDecision === "confirmed"
-                          ? "text-[#D62828]"
-                          : pendingDecision === "closed"
-                            ? "text-[#2D8A3E]"
-                            : "text-[#B45309]"
-                      }
-                    >
-                      {pendingDecision === "confirmed"
-                        ? t("“ยืนยันเหตุผิดปกติจริง”")
-                        : pendingDecision === "rejected"
-                          ? t("“ปฏิเสธรายงาน (เสียงรบกวน/ธรรมชาติ)”")
-                          : t("“ตรวจสอบเสร็จสิ้น & ปิดงาน”")}
-                    </span>{" "}{t("ใช่หรือไม่?")}</p>
-                  <p className="mt-1 text-xs text-[#526358]">{t("โปรดตรวจสอบความถูกต้องก่อนกดยืนยัน ระบบจะบันทึกประวัติการตัดสินใจลงฐานข้อมูลทันที")}</p>
+                  >{t("ยืนยันการดำเนินการ")} {t(reviewActions[pendingDecision].label)}</p>
+                  <p className="mt-1 text-xs text-[#526358]">
+                    {pendingDecision === "closed"
+                      ? t("ยืนยันว่าตรวจผลและดำเนินการที่เกี่ยวข้องเสร็จครบแล้วก่อนปิดงาน")
+                      : t("โปรดตรวจสอบความถูกต้องก่อนกดยืนยัน ระบบจะบันทึกประวัติการตัดสินใจลงฐานข้อมูลทันที")}
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -470,12 +485,13 @@ export default function BackofficeReportDetailPage({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => setPendingDecision(null)}
+                    onClick={() => { setReviewFeedback(null); setPendingDecision(null); }}
                     className="min-h-11 inline-flex items-center justify-center rounded-lg border border-[#B8C7BC] bg-white px-4 py-2 text-xs sm:text-sm font-semibold text-[#14241B] hover:bg-slate-100"
                   >{t("ยกเลิก (ย้อนกลับ)")}</button>
                 </div>
               </div>
             )}
+            <ActionFeedback result={reviewFeedback} />
           </section>
         </div>
       </div>

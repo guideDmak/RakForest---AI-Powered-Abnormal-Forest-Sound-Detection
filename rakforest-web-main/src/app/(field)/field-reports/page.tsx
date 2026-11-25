@@ -6,6 +6,8 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, Mic, Radio, Send } from "lucide-react";
 import { rakforestRepo } from "@/lib/supabase/repository";
 import { getClassNameTh } from "@/lib/utils/risk";
+import { canAcknowledgeFieldTask, fieldTaskStage, fieldTaskStatusLabel } from "@/lib/report-workflow";
+import ActionFeedback from "@/components/reports/ActionFeedback";
 import {
   FieldOutcomeBadge,
   ReportStatusBadge,
@@ -18,6 +20,7 @@ export default function FieldReportsListPage() {
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [tab, setTab] = useState<"active" | "completed">("active");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
 
   const loadReports = useCallback(async () => {
     const all = await rakforestRepo.getReports();
@@ -30,21 +33,19 @@ export default function FieldReportsListPage() {
 
   async function handleAcknowledge(reportId: string) {
     setBusyId(reportId);
+    setFailure(null);
     try {
       await rakforestRepo.acknowledgeFieldTask(reportId);
       await loadReports();
+    } catch (error) {
+      setFailure({ id: reportId, message: error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่" });
     } finally {
       setBusyId(null);
     }
   }
 
-  const filtered = reports.filter((r) =>
-    tab === "active"
-      ? ["pending", "under_review", "dispatched", "acknowledged"].includes(
-          r.status
-        )
-      : ["submitted", "confirmed", "rejected", "closed"].includes(r.status)
-  );
+  const closedCount = reports.filter((report) => report.status === "closed").length;
+  const filtered = reports.filter((report) => (report.status === "closed") === (tab === "completed"));
 
   return (
     <div className="space-y-5">
@@ -73,13 +74,7 @@ export default function FieldReportsListPage() {
               ? "bg-[#1B4332] text-white"
               : "bg-white border border-[#C6D1C8] text-[#526358]"
           }`}
-        >{t("ภารกิจที่ต้องดำเนินการ (")}{
-            reports.filter((r) =>
-              ["pending", "under_review", "dispatched", "acknowledged"].includes(
-                r.status
-              )
-            ).length
-          }
+        >{t("ภารกิจที่ต้องดำเนินการ (")}{reports.length - closedCount}
           )
         </button>
         <button
@@ -90,11 +85,7 @@ export default function FieldReportsListPage() {
               ? "bg-[#1B4332] text-white"
               : "bg-white border border-[#C6D1C8] text-[#526358]"
           }`}
-        >{t("ส่งผลตรวจแล้ว / ปิดงานแล้ว (")}{
-            reports.filter((r) =>
-              ["submitted", "confirmed", "rejected", "closed"].includes(r.status)
-            ).length
-          }
+        >{t("ปิดงานแล้ว (")}{closedCount}
           )
         </button>
       </div>
@@ -103,6 +94,8 @@ export default function FieldReportsListPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((item) => {
           const ai = item.report_audio?.[0]?.ai_classifications?.[0];
+          const stage = fieldTaskStage(item);
+          const workflowLabel = fieldTaskStatusLabel(item);
           return (
             <article
               key={item.id}
@@ -115,6 +108,7 @@ export default function FieldReportsListPage() {
                   </span>
                   <RiskBadge level={item.risk_level} size="xs" />
                 </div>
+                {workflowLabel && <p className="text-sm font-semibold text-[#1B4332]">{t(workflowLabel)}</p>}
 
                 <div className="flex items-center justify-between text-xs">
                   <span className="inline-flex items-center gap-1 font-bold text-[#1B4332]">
@@ -158,7 +152,7 @@ export default function FieldReportsListPage() {
               </div>
 
               <div className="flex items-center gap-2 pt-2 border-t border-[#E4ECE6]">
-                {(item.status === "dispatched" || item.status === "pending") && (
+                {canAcknowledgeFieldTask(item) && (
                   <button
                     type="button"
                     disabled={busyId === item.id}
@@ -170,17 +164,18 @@ export default function FieldReportsListPage() {
                   </button>
                 )}
                 <Link
-                  href={`/field-reports/${item.id}`}
+                  href={`/field-reports/${item.id}${stage === "in_progress" ? "#field-inspection" : ""}`}
                   className="flex-1 min-h-10 inline-flex items-center justify-center gap-1 rounded-lg border border-[#1B4332] bg-white px-3 py-2 text-xs font-semibold text-[#1B4332] hover:bg-[#EBF2ED]"
                 >
                   <span>
-                    {item.status === "acknowledged"
-                      ? t("บันทึกผลตรวจพื้นที่")
+                    {stage === "in_progress"
+                      ? t("ส่งผลตรวจ")
                       : t("ดูรายละเอียด & แผนที่")}
                   </span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
+              {failure?.id === item.id && <ActionFeedback result={{ tone: "error", message: failure.message }} />}
             </article>
           );
         })}

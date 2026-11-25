@@ -22,6 +22,7 @@ import {
   STATUS_LABELS_TH,
 } from "@/lib/utils/risk";
 import AudioRecorder from "@/components/reports/AudioRecorder";
+import ActionFeedback from "@/components/reports/ActionFeedback";
 import { AUDIO_MODEL_OPTIONS, type AudioModelId } from "@/lib/ml-contract";
 import {
   ReportStatusBadge,
@@ -137,7 +138,7 @@ export default function BackofficeReportsListPage() {
       setSelectedModelId("cnn_sigmoid");
       setUploadNote("");
       setShowUploadPanel(false);
-      await loadData();
+      setReports((previous) => [report, ...previous.filter((item) => item.id !== report.id)]);
       router.push(`/reports/${report.id}`);
     } catch (err) {
       setUploadError(
@@ -236,15 +237,10 @@ export default function BackofficeReportsListPage() {
               disabled={analyzing}
             />
 
-            {uploadError && (
-              <p role="alert" className="text-xs font-semibold text-[#D62828]">
-                {t(uploadError)}
-              </p>
-            )}
-
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
+                disabled={analyzing}
                 onClick={() => setShowUploadPanel(false)}
                 className="rounded-lg border border-[#C6D1C8] bg-white px-4 py-2.5 text-xs font-semibold text-[#526358]"
               >{t("ยกเลิก")}</button>
@@ -261,6 +257,11 @@ export default function BackofficeReportsListPage() {
                 </span>
               </button>
             </div>
+            <ActionFeedback result={uploadError
+              ? { tone: "error", message: uploadError }
+              : analyzing
+                ? { tone: "pending", message: "กำลังอัปโหลดไฟล์และวิเคราะห์เสียง…" }
+                : null} />
           </form>
         </section>
       )}

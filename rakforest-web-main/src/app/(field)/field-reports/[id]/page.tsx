@@ -19,6 +19,8 @@ import { rakforestRepo } from "@/lib/supabase/repository";
 import { OUTCOME_LABELS_TH } from "@/lib/utils/risk";
 import AudioWaveformPlayer from "@/components/reports/AudioWaveformPlayer";
 import AIClassificationCard from "@/components/reports/AIClassificationCard";
+import ActionFeedback, { type ActionResult } from "@/components/reports/ActionFeedback";
+import { canAcknowledgeFieldTask, fieldTaskStage, fieldTaskStatusLabel } from "@/lib/report-workflow";
 import {
   FieldOutcomeBadge,
   ReportStatusBadge,
@@ -44,7 +46,8 @@ export default function FieldReportTaskDetailPage({
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [evidencePreviews, setEvidencePreviews] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState("");
+  const [acknowledgmentFeedback, setAcknowledgmentFeedback] = useState<ActionResult | null>(null);
+  const [inspectionFeedback, setInspectionFeedback] = useState<ActionResult | null>(null);
   const [copiedGps, setCopiedGps] = useState(false);
 
   const loadDetail = useCallback(async () => {
@@ -72,14 +75,19 @@ export default function FieldReportTaskDetailPage({
 
   const audio = report.report_audio?.[0];
   const ai = audio?.ai_classifications?.[0];
+  const stage = fieldTaskStage(report);
+  const workflowLabel = fieldTaskStatusLabel(report);
 
   async function handleAcknowledge() {
     if (!report) return;
     setBusy(true);
+    setAcknowledgmentFeedback({ tone: "pending", message: "กำลังบันทึกการรับทราบงาน…" });
     try {
       const updated = await rakforestRepo.acknowledgeFieldTask(report.id);
       setReport(updated);
-      setFeedback("รับทราบภารกิจแล้ว คุณสามารถลงพื้นที่และกรอกผลตรวจสอบด้านล่างได้ทันที");
+      setAcknowledgmentFeedback({ tone: "success", message: "รับทราบภารกิจแล้ว คุณสามารถลงพื้นที่และกรอกผลตรวจสอบด้านล่างได้ทันที" });
+    } catch (error) {
+      setAcknowledgmentFeedback({ tone: "error", message: error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่" });
     } finally {
       setBusy(false);
     }
@@ -89,7 +97,7 @@ export default function FieldReportTaskDetailPage({
     e.preventDefault();
     if (!report) return;
     setBusy(true);
-    setFeedback("");
+    setInspectionFeedback({ tone: "pending", message: "กำลังบันทึกผลตรวจสอบ…" });
     try {
       const updated = await rakforestRepo.submitFieldInspection({
         reportId: report.id,
@@ -101,7 +109,9 @@ export default function FieldReportTaskDetailPage({
       });
       setReport(updated);
       setEvidenceFiles([]);
-      setFeedback("ส่งผลการตรวจสอบพื้นที่และหลักฐานไปยังศูนย์สั่งการส่วนกลางสำเร็จแล้ว");
+      setInspectionFeedback({ tone: "success", message: "บันทึกผลการตรวจสอบพื้นที่แล้ว" });
+    } catch (error) {
+      setInspectionFeedback({ tone: "error", message: error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ กรุณาลองใหม่" });
     } finally {
       setBusy(false);
     }
@@ -149,16 +159,6 @@ export default function FieldReportTaskDetailPage({
           )}
         </div>
       </div>
-
-      {feedback && (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs font-semibold text-emerald-900"
-        >
-          <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-          <span>{t(feedback)}</span>
-        </div>
-      )}
 
       {/* Responsive 2-Column Layout on Tablet/Desktop (>=1024px) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -252,7 +252,7 @@ export default function FieldReportTaskDetailPage({
               </p>
             </div>
 
-            {(report.status === "dispatched" || report.status === "pending") && (
+            {canAcknowledgeFieldTask(report) && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 space-y-2.5">
                 <p className="text-xs font-semibold text-amber-950">{t("ภารกิจนี้รอการกดรับทราบงานก่อนเริ่มบันทึกผลการตรวจสอบพื้นที่")}</p>
                 <button
@@ -267,7 +267,8 @@ export default function FieldReportTaskDetailPage({
               </div>
             )}
 
-            <form onSubmit={handleSubmitInspection} className="space-y-4">
+            <ActionFeedback result={acknowledgmentFeedback} />
+            {stage === "in_progress" && <form id="field-inspection" onSubmit={handleSubmitInspection} className="space-y-4">
               <fieldset className="space-y-2">
                 <legend className="text-xs font-bold text-[#14241B] mb-1.5">{t("เลือกผลการตรวจสอบพื้นที่จริง *")}</legend>
                 {(
@@ -359,12 +360,24 @@ export default function FieldReportTaskDetailPage({
               >
                 <Send className="h-4 w-4" />
                 <span>
-                  {busy
+                  {inspectionFeedback?.tone === "pending"
                     ? t("กำลังบันทึกผลตรวจสอบ…")
                     : t("ส่งผลการตรวจสอบพื้นที่ให้ศูนย์สั่งการ")}
                 </span>
               </button>
-            </form>
+            </form>}
+            <ActionFeedback result={inspectionFeedback} />
+            {workflowLabel && (
+              <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-950">
+                {t(workflowLabel)}
+              </p>
+            )}
+            {(stage === "submitted" || stage === "reviewed" || stage === "closed") && report.field_outcome && (
+              <div className="space-y-2 text-sm text-[#14241B]">
+                <FieldOutcomeBadge outcome={report.field_outcome} />
+                {report.field_notes && <p className="whitespace-pre-wrap break-words">{report.field_notes}</p>}
+              </div>
+            )}
           </section>
         </div>
       </div>
