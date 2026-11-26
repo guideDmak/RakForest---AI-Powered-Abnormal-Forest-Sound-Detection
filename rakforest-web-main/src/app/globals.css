@@ -26,6 +26,13 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html:has([data-evidence-viewer][open]),
+html:has([data-evidence-viewer][open]) body,
+[data-backoffice-scroll]:has([data-evidence-viewer][open]) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 html[data-font-scale="large"] {
   font-size: 18px;
 }

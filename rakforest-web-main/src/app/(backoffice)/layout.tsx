@@ -162,7 +162,7 @@ export default function BackofficeLayout({
       </aside>
 
       {/* Main Content Area: Only this column scrolls vertically on the page! */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
+      <div data-backoffice-scroll className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto [scrollbar-gutter:stable]">
         {/* Topbar (Locked sticky at top of the right panel) */}
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-[#D4DCD5] bg-white px-4 sm:px-6 shadow-2xs">
           <div className="flex items-center gap-3 min-w-0">

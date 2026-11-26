@@ -89,11 +89,11 @@ function loadLocalCache(): OperationalCache {
   return initial;
 }
 
-function saveLocalCache(cache: OperationalCache) {
+function saveLocalCache(cache: OperationalCache, notify = true) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify(cache));
-    window.dispatchEvent(new CustomEvent("rakforest-data-updated"));
+    if (notify) window.dispatchEvent(new CustomEvent("rakforest-data-updated"));
   } catch {
     // ignore quota error
   }
@@ -134,11 +134,18 @@ async function uploadReportMedia(
 function uploadReportEvidence(
   supabase: ReturnType<typeof createClient>,
   files: File[],
-  report: { id: string; code: string; uploaderId: string; uploadedAt: string },
+  report: { id: string; code: string; uploaderId: string; uploadedAt: string; inspection?: boolean },
 ): Promise<NonNullable<ReportRecord["report_evidence"]>> {
   return Promise.all(files.map(async (file) => {
     const id = crypto.randomUUID();
-    const fileUrl = await uploadReportMedia(supabase, "evidence-files", `${report.code}/${id}-${file.name}`, file);
+    const extension = /\.[a-z0-9]{1,10}$/i.exec(file.name)?.[0] ?? "";
+    const key = report.inspection ? `field-${id}${extension}` : `${id}-${file.name}`;
+    const path = `${report.code}/${key}`;
+    const fileUrl = await uploadReportMedia(supabase, "evidence-files", path, file);
+    if (report.inspection && (!fileUrl || fileUrl.startsWith("blob:"))) {
+      if (fileUrl) URL.revokeObjectURL(fileUrl);
+      throw new Error("อัปโหลดภาพหลักฐานไม่สำเร็จ กรุณาลองส่งอีกครั้ง");
+    }
     return {
       id,
       report_id: report.id,
@@ -301,13 +308,13 @@ export const rakforestRepo = {
   // FOREST ZONES & SENSOR STATIONS
   // ==========================================================================
   async getZones(): Promise<ForestZone[]> {
-    const zones=await readZones();const cache=loadLocalCache();cache.zones=zones;saveLocalCache(cache);return zones;
+    const zones=await readZones();const cache=loadLocalCache();cache.zones=zones;saveLocalCache(cache, false);return zones;
   },
   async saveZone(zone:Partial<ForestZone>&{name:string;polygon_coords:[number,number][]}):Promise<ForestZone>{
     const saved=await writeZone(zone);const cache=loadLocalCache();cache.zones=[saved,...cache.zones.filter(z=>z.id!==saved.id)];saveLocalCache(cache);return saved;
   },
   async getStations():Promise<SensorStation[]>{
-    const stations=await readStations();const cache=loadLocalCache();cache.stations=[...stations,...cache.stations.filter(s=>s.deleted_at&&!stations.some(n=>n.id===s.id))];saveLocalCache(cache);return stations;
+    const stations=await readStations();const cache=loadLocalCache();cache.stations=[...stations,...cache.stations.filter(s=>s.deleted_at&&!stations.some(n=>n.id===s.id))];saveLocalCache(cache, false);return stations;
   },
   async saveStation(station:Partial<SensorStation>&{station_code:string;name:string;lat:number;lng:number}):Promise<SensorStation>{
     const saved=await writeStation(station);const cache=loadLocalCache();cache.stations=[saved,...cache.stations.filter(s=>s.id!==saved.id)];saveLocalCache(cache);return saved;
@@ -316,7 +323,7 @@ export const rakforestRepo = {
   // ==========================================================================
   // REPORTS, AUDIO & AI CLASSIFICATION
   // ==========================================================================
-  async getReports(): Promise<ReportRecord[]> {
+  async getReports(options?: { strict?: boolean }): Promise<ReportRecord[]> {
     const supabase = createClient();
 
     try {
@@ -331,9 +338,11 @@ export const rakforestRepo = {
           reporter:profiles!reports_reporter_id_fkey(*),
           assignee:profiles!reports_assigned_to_fkey(*)`
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .retry(!options?.strict);
 
-      if (!error && data && data.length > 0) {
+      if (error && options?.strict) throw error;
+      if (!error && data && (data.length > 0 || options?.strict)) {
         const cache = loadLocalCache();
         const enriched = enrichReports(
           data as ReportRecord[],
@@ -342,11 +351,11 @@ export const rakforestRepo = {
           cache.profiles
         );
         cache.reports = enriched;
-        saveLocalCache(cache);
+        saveLocalCache(cache, false);
         return enriched;
       }
-    } catch {
-      // fallback
+    } catch (error) {
+      if (options?.strict) throw error;
     }
 
     const cache = loadLocalCache();
@@ -689,6 +698,7 @@ export const rakforestRepo = {
       code: current.report_code,
       uploaderId: profile.id,
       uploadedAt: now,
+      inspection: true,
     });
 
     const changes = {
@@ -699,7 +709,24 @@ export const rakforestRepo = {
       reviewed_at: null,
       updated_at: now,
     } satisfies Partial<ReportRecord>;
-    const updatedAt = await updateReportWorkflow(supabase, current, changes);
+    let updatedAt: string | undefined;
+    if (addedEvidence.length > 0) {
+      const { data, error } = await supabase.rpc("save_field_inspection_evidence", {
+        p_report_id: current.id,
+        p_expected_status: current.status,
+        p_expected_updated_at: current.updated_at ?? null,
+        p_outcome: params.outcome,
+        p_notes: changes.field_notes,
+        p_evidence: addedEvidence,
+      });
+      if (error || typeof data !== "string") {
+        throw new Error("บันทึกผลตรวจและหลักฐานไม่สำเร็จ กรุณาโหลดรายงานใหม่แล้วลองอีกครั้ง");
+      }
+      updatedAt = data;
+      changes.submitted_at = data;
+    } else {
+      updatedAt = await updateReportWorkflow(supabase, current, changes);
+    }
     const updated = {
       ...current,
       ...changes,

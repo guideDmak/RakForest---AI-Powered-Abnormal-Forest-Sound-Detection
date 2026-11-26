@@ -1,7 +1,7 @@
 "use client";
 import { useLanguage } from "@/lib/i18n/language";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -40,6 +40,9 @@ const RiskZoneMap = dynamic(() => import("@/components/map/RiskZoneMap"), {
 
 export default function BackofficeDashboardPage() {
   const { t, language } = useLanguage();
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const requestSequence = useRef(0);
   const [zones, setZones] = useState<ForestZone[]>([]);
   const [stations, setStations] = useState<SensorStation[]>([]);
   const [reports, setReports] = useState<ReportRecord[]>([]);
@@ -49,14 +52,24 @@ export default function BackofficeDashboardPage() {
   );
 
   const loadAll = useCallback(async () => {
-    const [z, st, rep] = await Promise.all([
-      rakforestRepo.getZones(),
-      rakforestRepo.getStations(),
-      rakforestRepo.getReports(),
-    ]);
-    setZones(z);
-    setStations(st);
-    setReports(rep);
+    const sequence = ++requestSequence.current;
+    setLoading(true);
+    try {
+      const [z, st, rep] = await Promise.all([
+        rakforestRepo.getZones(),
+        rakforestRepo.getStations(),
+        rakforestRepo.getReports({ strict: true }),
+      ]);
+      if (sequence !== requestSequence.current) return;
+      setZones(z);
+      setStations(st);
+      setReports(rep);
+      setLoadError(false);
+    } catch {
+      if (sequence === requestSequence.current) setLoadError(true);
+    } finally {
+      if (sequence === requestSequence.current) setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -74,12 +87,20 @@ export default function BackofficeDashboardPage() {
         { event: "*", schema: "public", table: "forest_zones" },
         () => loadAll()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sensor_stations" },
+        () => loadAll()
+      )
       .subscribe();
 
-    const onLocalUpdate = () => loadAll();
+    const onLocalUpdate = () => void loadAll();
+    window.addEventListener("online", onLocalUpdate);
     window.addEventListener("rakforest-data-updated", onLocalUpdate);
 
     return () => {
+      requestSequence.current++;
+      window.removeEventListener("online", onLocalUpdate);
       window.removeEventListener("rakforest-data-updated", onLocalUpdate);
       supabase.removeChannel(channel);
     };
@@ -125,6 +146,21 @@ export default function BackofficeDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {(loadError || loading) && (
+        <div
+          role={loadError ? "alert" : "status"}
+          className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4 text-sm ${loadError ? "border-red-300 bg-red-50 text-red-900" : "border-[#D4DCD5] bg-white text-[#526358]"}`}
+        >
+          <span>{t(loadError ? "โหลดข้อมูลแดชบอร์ดไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง" : "กำลังโหลดข้อมูลแดชบอร์ด…")}</span>
+          {loadError && (
+            <button type="button" onClick={() => void loadAll()} disabled={loading}
+              className="min-h-11 rounded-lg border border-red-300 bg-white px-4 font-semibold disabled:opacity-50">
+              {t(loading ? "กำลังโหลดข้อมูลแดชบอร์ด…" : "ลองอีกครั้ง")}
+            </button>
+          )}
+        </div>
+      )}
+      {!loadError && !loading && (<>
       {/* Top Action Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -490,6 +526,7 @@ export default function BackofficeDashboardPage() {
 
         <p className="mt-4 text-[11px] text-[#526358]">{t("* หมายเหตุความโปร่งใสข้อมูล: ระดับความเสี่ยงประมวลผลจากสัญญาณเสียงที่บันทึกได้จริงผ่านโมเดล AI AudioCNN ร่วมกับพิกัดเสาไมค์และโซนป่าไม้ ไม่ใช่การพยากรณ์ล่วงหน้า")}</p>
       </section>
+      </>)}
     </div>
   );
 }

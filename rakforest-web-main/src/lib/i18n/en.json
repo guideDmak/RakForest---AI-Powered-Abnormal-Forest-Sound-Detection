@@ -264,6 +264,7 @@
   "มอบหมายงานภาคสนาม & แจ้งเตือน Telegram": "Assign patrol and notify",
   "อัปเดตคำสั่งการ & ส่งแจ้งเตือนซ้ำ": "Update instructions and notify again",
   "3. ผลการลงพื้นที่ตรวจสอบของเจ้าหน้าที่ภาคสนาม": "3. Field inspection results",
+  "ไม่มีข้อมูลผู้รับผิดชอบ": "No assignee recorded",
   "ไม่มีบันทึกเพิ่มเติม": "No additional notes",
   "ส่งผลเมื่อ:": "Submitted:",
   "เจ้าหน้าที่ภาคสนามรับทราบงานแล้ว กำลังเดินทางเข้าตรวจสอบพื้นที่รอบเสาไมค์": "The ranger accepted the assignment and is travelling to the site.",
@@ -766,5 +767,15 @@
   "ส่งถึงเจ้าหน้าที่ประจำโซนเกิดเหตุและโซนใกล้จุดเกิดเหตุ วัดถึงขอบเขตโซน ค่าเริ่มต้น 1,000 ม. ตั้ง 0 เพื่อใช้เฉพาะโซนเกิดเหตุ": "Notify rangers assigned to the incident zone and nearby zones by distance to their boundaries. Default: 1,000 m. Set 0 to use the incident zone only.",
   "บันทึกรัศมี": "Save radius",
   "คืนค่าเริ่มต้น": "Restore default",
-  "ยังไม่ได้กำหนดโซนรับผิดชอบ": "No assigned zones"
+  "ยังไม่ได้กำหนดโซนรับผิดชอบ": "No assigned zones",
+  "อัปโหลดภาพหลักฐานไม่สำเร็จ กรุณาลองส่งอีกครั้ง": "Evidence upload failed. Try again.",
+  "บันทึกผลตรวจและหลักฐานไม่สำเร็จ กรุณาโหลดรายงานใหม่แล้วลองอีกครั้ง": "Could not save the inspection and evidence. Reload the report and try again.",
+  "กำลังอัปเดตผลตรวจ…": "Refreshing inspection…",
+  "อัปเดตผลตรวจ": "Refresh inspection",
+  "ปิดภาพ": "Close image",
+  "ซูมภาพหลักฐาน": "Zoom evidence image",
+  "ระดับซูมภาพ": "Image zoom level",
+  "โหลดข้อมูลแดชบอร์ดไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง": "Could not load the dashboard. Check your connection and try again.",
+  "กำลังโหลดข้อมูลแดชบอร์ด…": "Loading dashboard…",
+  "ลองอีกครั้ง": "Try again"
 }

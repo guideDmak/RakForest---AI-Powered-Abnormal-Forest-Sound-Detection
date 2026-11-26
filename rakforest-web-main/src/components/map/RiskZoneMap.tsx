@@ -33,6 +33,7 @@ interface Props {
   draftRadiusMeters?: number;
   heightClass?: string;
   showLayerControls?: boolean;
+  focusSelectedReport?: boolean;
   initialCenter?: [number, number];
   initialZoom?: number;
 }
@@ -67,6 +68,7 @@ export default function RiskZoneMap({
   draftRadiusMeters = 350,
   heightClass = "h-[520px]",
   showLayerControls = true,
+  focusSelectedReport = false,
 }: Props) {
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -378,6 +380,27 @@ export default function RiskZoneMap({
     };
   }, []);
 
+  const focusedReport = focusSelectedReport ? reports.find((report) => report.id === selectedReportId) : undefined;
+  const reportLng = focusedReport?.lng;
+  const reportLat = focusedReport?.lat;
+  const station = focusedReport?.sensor_stations;
+  const stationLng = station?.lng;
+  const stationLat = station?.lat;
+  const radius = station?.radius_meters;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || reportLng == null || reportLat == null) return;
+    const bounds = new maplibregl.LngLatBounds().extend([reportLng, reportLat]);
+    if (stationLng != null && stationLat != null) {
+      bounds.extend([stationLng, stationLat]);
+      if (radius && radius > 0) {
+        createCirclePolygon(stationLng, stationLat, radius).forEach((point) => bounds.extend(point));
+      }
+    }
+    map.fitBounds(bounds, { padding: 36, maxZoom: 15, duration: 0 });
+  }, [ready, reportLng, reportLat, stationLng, stationLat, radius]);
+
   // Toggle Basemap Raster Layer Visibility without resetting the map or losing polygons!
   useEffect(() => {
     const map = mapRef.current;
@@ -625,12 +648,13 @@ export default function RiskZoneMap({
 
     if (showReports) {
       for (const rep of reports) {
-        if (rep.status === "closed" || rep.status === "rejected") continue;
+        const focused = focusSelectedReport && rep.id === selectedReportId;
+        if (!focused && (rep.status === "closed" || rep.status === "rejected")) continue;
         // Offset slightly if at the exact same coordinate as a station so both remain clickable
         const offsetLng =
-          rep.source_type === "station_sensor" ? rep.lng + 0.0012 : rep.lng;
+          !focused && rep.source_type === "station_sensor" ? rep.lng + 0.0012 : rep.lng;
         const offsetLat =
-          rep.source_type === "station_sensor" ? rep.lat + 0.0009 : rep.lat;
+          !focused && rep.source_type === "station_sensor" ? rep.lat + 0.0009 : rep.lat;
 
         const el = document.createElement("button");
         el.type = "button";
@@ -707,6 +731,7 @@ export default function RiskZoneMap({
     selectedZoneId,
     selectedStationId,
     selectedReportId,
+    focusSelectedReport,
     showZones,
     showStations,
     showRadii,
@@ -770,7 +795,7 @@ export default function RiskZoneMap({
       {/* Top Controls Overlay Bar (Flex-wrap so left camera jumps & right basemaps never collide in ก+ mode!) */}
       <div className="absolute top-2.5 inset-x-2.5 z-10 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
         {/* Left Camera Jumps */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+        {!focusSelectedReport && <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             onClick={flyToStations}
@@ -805,7 +830,7 @@ export default function RiskZoneMap({
               <span>{t("ซูมเข้าโซนที่เลือก")}</span>
             </button>
           )}
-        </div>
+        </div>}
 
         {/* Right Basemap & Layer Control Trigger */}
         {showLayerControls && (
